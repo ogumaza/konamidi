@@ -1,0 +1,118 @@
+// SPDX-License-Identifier: MIT
+
+// Standard MIDI File (format 1) writer.
+
+#pragma once
+
+#include <algorithm>
+#include <cstdint>
+#include <deque>
+#include <string>
+#include <vector>
+
+namespace konamidi
+{
+
+// MIDI controller numbers.
+namespace cc
+{
+
+constexpr int kBankSelect = 0;
+constexpr int kDataEntry = 6;
+constexpr int kVolume = 7;
+constexpr int kPan = 10;
+constexpr int kExpression = 11;
+constexpr int kBankSelectLsb = 32;
+constexpr int kDataEntryLsb = 38;
+constexpr int kReverb = 91;
+constexpr int kChorus = 93;
+constexpr int kRpnLsb = 100;
+constexpr int kRpnMsb = 101;
+
+} // namespace cc
+
+// A track of a Standard MIDI File. Events can be added in any order: they're written by tick, and at the same tick meta
+// events come first, then note-offs, bank selects, program changes, controllers, pitch bends and note-ons, each kind in
+// the order it was added.
+class MidiTrack
+{
+public:
+    void Meta(uint32_t tick, uint8_t type, const std::string& text);
+
+    void Name(const std::string& text)
+    {
+        Meta(0, 0x03, text);
+    }
+
+    void Tempo(uint32_t tick, uint32_t micros_per_quarter);
+    void TimeSignature(uint32_t tick, int numerator, int denominator_pow2);
+
+    void NoteOn(uint32_t tick, int ch, int key, int velocity);
+    void NoteOff(uint32_t tick, int ch, int key);
+    void Control(uint32_t tick, int ch, int cc, int value);
+    void Program(uint32_t tick, int ch, int program);
+
+    // Adds a bank select (CC0 + CC32), which goes before program changes at the same tick.
+    void Bank(uint32_t tick, int ch, int bank);
+
+    // Adds a pitch bend of `value`, from 0 to 16383 with the centre at 8192.
+    void PitchBend(uint32_t tick, int ch, int value);
+
+    // Makes the track last at least until `tick`.
+    void SetEnd(uint32_t tick)
+    {
+        end_ = std::max(end_, tick);
+    }
+
+    // Returns the track's events as the data of an MTrk chunk.
+    std::vector<uint8_t> Encode() const;
+
+private:
+    // The order of events at the same tick.
+    enum Order : int
+    {
+        kMeta = 0,
+        kNoteOff = 10,
+        kBank = 15,
+        kProgram = 20,
+        kControl = 30,
+        kBend = 40,
+        kNoteOn = 50
+    };
+
+    struct Event
+    {
+        uint32_t tick;
+        int order;
+        std::vector<uint8_t> bytes;
+    };
+
+    void AddEvent(uint32_t tick, int order, std::vector<uint8_t> bytes);
+
+    std::vector<Event> events_;
+    uint32_t end_ = 0;
+};
+
+// A Standard MIDI File of format 1: tracks played together, timed in ticks of 1/`division` of a quarter note.
+class MidiFile
+{
+public:
+    explicit MidiFile(uint16_t division) : division_(division)
+    {
+    }
+
+    MidiTrack& AddTrack()
+    {
+        tracks_.emplace_back();
+        return tracks_.back();
+    }
+
+    // Writes the file. Returns false and sets `error` if it can't be written.
+    bool Write(const std::string& path, std::string& error) const;
+
+private:
+    uint16_t division_;
+    std::deque<MidiTrack> tracks_; // deque: AddTrack() references stay valid
+};
+
+} // namespace konamidi

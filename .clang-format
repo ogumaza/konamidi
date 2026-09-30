@@ -1,0 +1,44 @@
+# clang-format's Google preset with the stricter choices from the Google C++
+# Style Guide, plus some departures taken from common Allman practice: Allman
+# braces, 4-space indents, access specifiers and case labels flush with their
+# class or switch, case blocks indented under their label, no one-line
+# functions, one space before end-of-line comments (lined up when they end
+# consecutive lines), and a 120-column limit. Every namespace gets a closing
+# comment, however short it is.
+BasedOnStyle: Google
+IndentWidth: 4
+AccessModifierOffset: -4
+ColumnLimit: 120
+IndentCaseLabels: false
+IndentCaseBlocks: true
+SpacesBeforeTrailingComments: 1
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+ShortNamespaceLines: 0
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: true
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterExternBlock: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: true
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+AllowShortFunctionsOnASingleLine: None
+AllowShortEnumsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Inline
+DerivePointerAlignment: false
+PointerAlignment: Left
+InsertBraces: true
+EmptyLineBeforeAccessModifier: Always

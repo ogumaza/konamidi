@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: MIT
+
+// Version and description for konamidi.exe's Windows file properties. CMake takes the version from project().
+
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "Konami GBA music to MIDI and SoundFont converter"
+            VALUE "FileVersion", "@PROJECT_VERSION@"
+            VALUE "InternalName", "konamidi"
+            VALUE "LegalCopyright", "Copyright (c) 2026 the konamidi authors. MIT License."
+            VALUE "OriginalFilename", "konamidi.exe"
+            VALUE "ProductName", "konamidi"
+            VALUE "ProductVersion", "@PROJECT_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

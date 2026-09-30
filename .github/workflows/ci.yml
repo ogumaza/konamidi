@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: MIT
+
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86-64 GCC
+            os: ubuntu-24.04
+            cmake-args: -DCMAKE_CXX_COMPILER=g++
+          - name: Linux x86-64 Clang
+            os: ubuntu-24.04
+            cmake-args: -DCMAKE_CXX_COMPILER=clang++
+          - name: macOS ARM64
+            os: macos-15
+          - name: macOS x86-64
+            os: macos-15-intel
+          - name: Windows x86-64 MSVC
+            os: windows-2025
+            cmake-args: -A x64
+          - name: Windows x86-64 MinGW
+            os: windows-2025
+            cmake-args: -G Ninja
+            msys2: UCRT64
+    defaults:
+      run:
+        shell: ${{ matrix.msys2 && 'msys2 {0}' || 'bash' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - if: matrix.msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msys2 }}
+          pacboy: gcc:p cmake:p ninja:p
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_COMPILE_WARNING_AS_ERROR=ON ${{ matrix.cmake-args }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload the test output
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test output ${{ matrix.name }}
+          path: build/test_output

@@ -1,0 +1,3 @@
+# Text files are stored with LF line endings, and shell scripts are checked out with LF everywhere.
+* text=auto
+*.sh text eol=lf
