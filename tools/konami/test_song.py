@@ -5,12 +5,12 @@
 
     test_song.py ROM OUT.gba
 
-compare_trace.py and compare_notes.py then check konamidi against the driver on the copy:
+compare_trace.py and compare_notes.py then check supergbamidi against the driver on the copy:
 
-    python test_song.py ../rom.gba test.gba
-    python compare_trace.py test.gba ../build/konamidi --songs 0 --frames 2000
-    ../build/konamidi -q -s 0 -o test test.gba
-    python compare_notes.py test.gba ../build/konamidi test --songs 0
+    python tools/konami/test_song.py rom.gba test.gba
+    python tools/konami/compare_trace.py test.gba build/supergbamidi --songs 0 --frames 2000
+    build/supergbamidi -q -s 0 -o test test.gba
+    python tools/konami/compare_notes.py test.gba build/supergbamidi test --songs 0
 
 Test songs for the WCT 2004 revision (BYWP), the Rave Master revision (BRME), the Eternal Duelist revision (AY5E and
 AYWE) and the Dungeon Dice Monsters revision (AYDE) are built in.
@@ -37,8 +37,10 @@ bend them, while the other voice of their FIFO is silent, and voice 2 plays voic
 """
 import argparse
 import struct
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # for gbarom.py, in tools/
 from gbarom import ROM_BASE, load_rom
 
 
@@ -151,7 +153,7 @@ def dungeon_dice_tracks():
     tracks[3] = [0x00, 0xE8, 0x48, 0x04, 0xC6, 0x04, 0xE8, 0x4C, 0x04, 0xFC, 0x02, 0xE8, 0x20, 0x04, 0xFC, 0x5C, 0xA9,
                  0x17, 0x06, 0xFC, 0x02, 0xFD]
 
-    # Voice 0 plays sample 5 from a duty byte at notes 24, the sample's own rate, 28 and 26, and bends them with F2,
+    # Voice 0 plays sample 5 from a duty byte at notes 24, the sample's rate, 28 and 26, and bends them with F2,
     # once in the frame of a note, which starts it at the bent pitch. D6 changes the volume, C9 restarts the note, and a
     # rest stops it. Later it releases a note with FB. Voice 1 is silent throughout, as the FIFO that plays voices 0 and
     # 1 takes the rate of the last note started on it.

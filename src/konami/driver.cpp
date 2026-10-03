@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-#include "driver.h"
+#include "konami/driver.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -9,9 +9,9 @@
 #include <set>
 #include <utility>
 
-#include "seqformat.h"
+#include "konami/seqformat.h"
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 namespace
 {
@@ -201,7 +201,7 @@ SongCount CountSongs(const Rom& rom, uint32_t table, Revision revision)
         }
 
         // A header that points into the ROM, before any song's data, is most likely a song whose tracks use commands
-        // konamidi doesn't know.
+        // supergbamidi doesn't know.
         const int score = ScoreSong(rom, h, revision);
         if (score < h.tracks / 2)
         {
@@ -382,7 +382,7 @@ bool PlausibleSampleHeader(const Rom& rom, uint32_t p)
 }
 
 // Returns true if `entry` could be an entry of the Dungeon Dice Monsters revision's sample table: a pointer to the PCM,
-// and a word with the length in blocks of 16 samples in bits 20-31 and the sample's own timer period in bits 0-15, for
+// and a word with the length in blocks of 16 samples in bits 20-31 and the sample's timer period in bits 0-15, for
 // a rate of 1 to 65 kHz.
 bool PlausibleDungeonDiceSample(const Rom& rom, uint32_t entry)
 {
@@ -398,7 +398,7 @@ bool PlausibleDungeonDiceSample(const Rom& rom, uint32_t entry)
     return length > 0 && period >= 0x100 && period <= 0x4000 && rom.Contains(rom.U32(entry), length);
 }
 
-// Returns true if entry `index` of a sample table of revision `revision` at `table` is a sample konamidi can read.
+// Returns true if entry `index` of a sample table of revision `revision` at `table` is a sample supergbamidi can read.
 bool ReadableSample(const Rom& rom, uint32_t table, int index, Revision revision)
 {
     if (revision == Revision::kDungeonDiceMonsters)
@@ -466,7 +466,7 @@ std::vector<int> UsedSamples(const Rom& rom, uint32_t song_table, int song_count
         used.push_back(index);
     }
 
-    // Most frequently used first: rejects wrong candidates fastest.
+    // Check the most frequently used samples first to reject invalid candidates sooner.
     std::sort(used.begin(), used.end(), [&](int a, int b) { return freq.at(a) > freq.at(b); });
 
     return used;
@@ -474,7 +474,7 @@ std::vector<int> UsedSamples(const Rom& rom, uint32_t song_table, int song_count
 
 // Returns the song tables the play-song routine could load: its entry is table + song * 36 (song * 9 * 4), or song * 28
 // (song * 7 * 4) in the Rave Master revision, song * 24 (song * 3 * 8) in the Eternal Duelist revision, or song * 20
-// (song * 5 * 4) in the Dungeon Dice Monsters revision. Sets `exact` if they come from the routine's own code, rather
+// (song * 5 * 4) in the Dungeon Dice Monsters revision. Sets `exact` if they come from the routine's code, rather
 // than from code that only works out an address the same way.
 std::set<uint32_t> SongTablesFromCode(const Rom& rom, Revision revision, bool& exact)
 {
@@ -596,13 +596,13 @@ uint32_t ScanForSongTable(const Rom& rom, Revision revision)
 }
 
 // Finds the song table from the play-song routine's code, or failing that in the data. Returns 0 and sets `error` if
-// there's none.
+// the code loads a table without songs, or returns 0 with `error` empty if there's no sign of a song table.
 uint32_t FindSongTable(const Rom& rom, Revision revision, std::vector<std::string>& log, std::string& error)
 {
-    // Of the tables the code could load, the one with the most songs. The play-song routine's own code gives the
-    // table's address, so its table only has to hold a song that parses. A table from other code also has to be laid
-    // out like the driver's song data, as a table the data scan finds does. Other revisions of the driver compute the
-    // same address, and their songs can parse as far as a few jingles although their commands differ.
+    // Choose the candidate table with the most songs. The play-song routine's code gives the table's address,
+    // so its table only needs one song that parses. Tables found through other code must also pass the data scan's
+    // layout checks. Other revisions compute the same address, and some of their jingles can parse despite the
+    // different command sets.
     bool exact = false;
     const std::set<uint32_t> candidates = SongTablesFromCode(rom, revision, exact);
     uint32_t loaded = 0; // the first of them in the ROM
@@ -629,12 +629,12 @@ uint32_t FindSongTable(const Rom& rom, Revision revision, std::vector<std::strin
         return best;
     }
 
-    // The play-song routine's own code gives the table's address, so a table found in the data instead would be the
+    // The play-song routine's code gives the table's address, so a table found in the data instead would be the
     // wrong one.
     if (exact && loaded)
     {
         error = "found the play-song code, but the song table it loads, at " + Hex(loaded) +
-                ", holds no songs konamidi can read (--song-table and --song-count override detection)";
+                ", holds no songs supergbamidi can read (--song-table and --song-count override detection)";
         return 0;
     }
 
@@ -650,9 +650,8 @@ uint32_t FindSongTable(const Rom& rom, Revision revision, std::vector<std::strin
         return best;
     }
 
-    error =
-        "no Konami sound driver found: this game's music uses another engine, or a driver version konamidi doesn't "
-        "know";
+    // Nothing that holds the driver's songs: this game has another driver.
+    error.clear();
 
     return 0;
 }
@@ -798,11 +797,11 @@ uint32_t FindSampleTable(const Rom& rom, const std::vector<int>& used, const Tab
         return 0;
     }
 
-    // Of the tables the code loads, take the one with the fewest samples konamidi can't read.
+    // Of the tables the code loads, take the one with the fewest samples supergbamidi can't read.
     const uint32_t ldr_offset = 2 * uint32_t(note_start.ldr);
     const std::vector<uint32_t> hits = FindThumb(rom, note_start.code);
     uint32_t best = 0;
-    std::vector<int> unreadable; // the samples the songs play that `best` has no header konamidi can read for
+    std::vector<int> unreadable; // samples used by the songs that have no readable header in `best`
     for (uint32_t hit : hits)
     {
         const uint32_t t = ThumbLiteral(rom, hit + ldr_offset);
@@ -827,15 +826,15 @@ uint32_t FindSampleTable(const Rom& rom, const std::vector<int>& used, const Tab
     }
 
     // The code gives the table's address, so a table found in the data instead would be the wrong one. The table only
-    // has to have a header konamidi can read for at least half of the samples. The others may be in a mode konamidi
-    // doesn't know, such as one with a negative length.
+    // has to have a header supergbamidi can read for at least half of the samples. The others may be in a mode
+    // supergbamidi doesn't know, such as one with a negative length.
     if (best)
     {
         if (unreadable.size() * 2 > used.size())
         {
             error =
-                "found the note-start code, but konamidi can't read most of the songs' samples in the sample table it "
-                "loads, at " +
+                "found the note-start code, but supergbamidi can't read most of the songs' samples in the sample "
+                "table it loads, at " +
                 Hex(best) + " (--sample-table overrides detection)";
             return 0;
         }
@@ -849,7 +848,7 @@ uint32_t FindSampleTable(const Rom& rom, const std::vector<int>& used, const Tab
             {
                 list += (list.empty() ? "" : ", ") + std::to_string(idx);
             }
-            warnings.push_back("samples konamidi can't read, whose notes are skipped: " + list);
+            warnings.push_back("samples supergbamidi can't read, whose notes are skipped: " + list);
         }
 
         return best;
@@ -859,7 +858,7 @@ uint32_t FindSampleTable(const Rom& rom, const std::vector<int>& used, const Tab
                                    : "the sample table that the note-start code loads isn't in the ROM";
     if (revision == Revision::kDungeonDiceMonsters)
     {
-        error = std::string(why) + ", and konamidi can't look for this revision's sample table in the data";
+        error = std::string(why) + ", and supergbamidi can't look for this revision's sample table in the data";
         return 0;
     }
 
@@ -892,8 +891,8 @@ double TimerRate(const Rom& rom, uint32_t timer_table)
 // ldrb rX,[rY] / cmp rX,#0xFC / ble, then FF, and FD in the Ultimate Masters revision or FE in older ones. Of those,
 // the WCT 2004 revision goes on with EF and FA, the Rave Master revision with EF and F5, the Eternal Duelist revision
 // with EF and F3, and the Dungeon Dice Monsters revision with EF and FC. Returns false and sets `error` for another
-// older revision, which konamidi can't read. A ROM without a command reader that this recognises is taken to have the
-// Ultimate Masters revision.
+// older revision, which supergbamidi can't read. A ROM without a command reader that this recognises is taken to have
+// the Ultimate Masters revision.
 bool FindRevision(const Rom& rom, Revision& revision, std::vector<std::string>& log, std::string& error)
 {
     revision = Revision::kUltimateMasters;
@@ -938,7 +937,7 @@ bool FindRevision(const Rom& rom, Revision& revision, std::vector<std::string>& 
                                                           opcodes[4] != 0xF3 && opcodes[4] != 0xFC)))
         {
             error =
-                "this game has an older revision of Konami's driver, whose commands konamidi can't read (its "
+                "this game has an older revision of Konami's driver, whose commands supergbamidi can't read (its "
                 "command reader is at " +
                 Hex(reader) + ")";
             return false;
@@ -959,7 +958,7 @@ bool FindRevision(const Rom& rom, Revision& revision, std::vector<std::string>& 
     return true;
 }
 
-// Finds the Dungeon Dice Monsters revision's own tables from the code that loads them. Returns false and sets `error`
+// Finds the Dungeon Dice Monsters revision's tables from the code that loads them. Returns false and sets `error`
 // if the sample map or the sample period table, which its notes read, isn't there.
 bool FindDungeonDiceTables(const Rom& rom, DriverInfo& info, std::string& error)
 {
@@ -1164,7 +1163,7 @@ bool DetectDriver(const Rom& rom, const DriverOverrides& overrides, DriverInfo& 
     if (info.song_count <= 0)
     {
         error = "the song table at " + Hex(info.song_table) +
-                " holds no songs konamidi can read (--song-count overrides this)";
+                " holds no songs supergbamidi can read (--song-count overrides this)";
         return false;
     }
 
@@ -1328,4 +1327,4 @@ bool DetectDriver(const Rom& rom, const DriverOverrides& overrides, DriverInfo& 
     return true;
 }
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

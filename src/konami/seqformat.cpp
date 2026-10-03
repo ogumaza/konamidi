@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-#include "seqformat.h"
+#include "konami/seqformat.h"
 
 #include <cstdio>
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 namespace
 {
@@ -308,7 +308,7 @@ Command DecodeDungeonDice(const Rom& rom, uint32_t addr, Command c)
 
         case 0xF7:
         case 0xF6:
-            // F7 sets a flag of the track and F6 clears it, and nothing reads it.
+            // F7 sets a track flag and F6 clears it. The driver never reads the flag.
             c.op = Op::kNop;
             break;
 
@@ -751,4 +751,4 @@ std::string Describe(const Command& c, int track, Revision revision)
     return buf;
 }
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

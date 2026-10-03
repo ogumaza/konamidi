@@ -8,11 +8,11 @@
 #include <string>
 #include <vector>
 
-#include "driver.h"
+#include "konami/driver.h"
+#include "konami/soundfont.h"
 #include "rom.h"
-#include "soundfont.h"
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 
 // Conversion settings and output paths.
@@ -38,6 +38,9 @@ struct SongSummary
     std::vector<std::string> warnings;
 };
 
+// Works out a song's length, loop and tracks the way ConvertSong() does, without writing anything.
+SongSummary InspectSong(const Rom& rom, const DriverInfo& info, int song, const ConvertOptions& opt);
+
 // Converts one song. If `shared` is supplied, adds instruments to it with bank = song; otherwise writes a separate
 // SF2 next to the MIDI file.
 SongSummary ConvertSong(const Rom& rom, const DriverInfo& info, int song, const ConvertOptions& opt,
@@ -46,4 +49,4 @@ SongSummary ConvertSong(const Rom& rom, const DriverInfo& info, int song, const 
 // Writes a text listing of every command of every track of a song. Returns false and sets `error` on failure.
 bool DumpSong(const Rom& rom, const DriverInfo& info, int song, const std::string& path, std::string& error);
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

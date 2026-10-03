@@ -1,13 +1,18 @@
 -- SPDX-License-Identifier: MIT
 
--- Konamidi: drop Konami GBA ROMs (.gba) or GSF rips (.gsflib, .minigsf) on
--- this app to convert their music to MIDI files and SoundFonts. The results
--- for each file go in a folder named after it, next to it.
+-- Drop the ROMs (.gba) or GSF rips (.gsflib, .minigsf) of GBA games with
+-- Konami's or Rare's sound driver on this app to convert their music to MIDI
+-- files and SoundFonts. Each file's results go in a folder beside it, with
+-- the same name.
 --
--- The konamidi command-line tool is inside the app, in Contents/Resources.
+-- The command-line tool is inside the app, in Contents/Resources.
+
+-- The command-line tool's file name, and the app's name for its dialogs.
+property toolName : "supergbamidi"
+property appTitle : "Supergbamidi"
 
 on run
-	set theFiles to choose file with prompt "Choose Konami GBA ROMs or GSF rips to convert:" with multiple selections allowed
+	set theFiles to choose file with prompt "Choose GBA ROMs or GSF rips to convert:" with multiple selections allowed
 	showResults(convertFiles(theFiles, toolPath()))
 end run
 
@@ -16,10 +21,10 @@ on open theFiles
 end open
 
 on toolPath()
-	return POSIX path of (path to resource "konamidi")
+	return POSIX path of (path to resource toolName)
 end toolPath
 
--- Runs konamidi once for all files so mini-GSFs sharing a library are converted once.
+-- Runs the tool once for all files so mini-GSFs sharing a library are converted once.
 -- Returns {report, output folders}, with one report line per input file.
 on convertFiles(theFiles, tool)
 	set commandLine to quoted form of tool
@@ -37,8 +42,8 @@ on convertFiles(theFiles, tool)
 		set toolOutput to errText
 	end try
 
-	-- konamidi reports on the files in order, and its first line about each one starts with the
-	-- file's name. After that, "converted ..." says what became of the file, "output: ..." names its
+	-- The tool reports on the files in order, and its first line about each one starts with the
+	-- file's name. After that, "converted ..." reports the result, "output: ..." names its
 	-- folder, and another line starting with its name is an error that stopped its conversion.
 	set reportLines to {}
 	set outputFolders to {}
@@ -58,7 +63,7 @@ on convertFiles(theFiles, tool)
 		end if
 	end repeat
 
-	-- If no file was reported, konamidi failed before conversion. Its last line gives the error.
+	-- If no file was reported, the tool failed before conversion. Its last line gives the error.
 	if reportLines is {} then set end of reportLines to lastLine(toolOutput)
 	return {joinLines(reportLines), outputFolders}
 end convertFiles
@@ -66,14 +71,14 @@ end convertFiles
 on showResults(conversion)
 	set {reportText, outputFolders} to conversion
 	if (count of outputFolders) is 0 then
-		display dialog reportText buttons {"OK"} default button 1 with title "Konamidi" with icon caution
+		display dialog reportText buttons {"OK"} default button 1 with title appTitle with icon caution
 	else
 		if (count of outputFolders) is 1 then
 			set openLabel to "Open Folder"
 		else
 			set openLabel to "Open Folders"
 		end if
-		set dialogReply to display dialog reportText buttons {"OK", openLabel} default button 2 with title "Konamidi"
+		set dialogReply to display dialog reportText buttons {"OK", openLabel} default button 2 with title appTitle
 		if button returned of dialogReply is openLabel then
 			repeat with d in outputFolders
 				do shell script "open " & quoted form of (d as text)

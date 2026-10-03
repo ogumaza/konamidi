@@ -13,14 +13,14 @@
 #include <string>
 #include <vector>
 
-#include "driver.h"
+#include "konami/driver.h"
+#include "konami/seqformat.h"
 #include "rom.h"
-#include "seqformat.h"
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 
-// One track's requests to its sound channel in one frame. This is the driver's own 12-byte per-track output record,
+// One track's requests to its sound channel in one frame. This is the driver's 12-byte per-track output record,
 // plus the note's base pitch.
 struct TrackOutput
 {
@@ -359,4 +359,4 @@ private:
     std::array<Track, kTracks> tracks_{};
 };
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

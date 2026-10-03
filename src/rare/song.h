@@ -1,0 +1,161 @@
+// SPDX-License-Identifier: MIT
+
+// The driver's data: tune headers, track commands and instruments.
+
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "rom.h"
+
+namespace supergbamidi::rare
+{
+
+// The two ways a track names a command's MIDI channel. The driver revisions of Donkey Kong Country, Sabre Wulf and It's
+// Mr. Pants give the channel in a byte after the command, and those of Grunty's Revenge, Donkey Kong Country 2 and
+// Banjo-Pilot in the command byte's high nibble.
+enum class Format
+{
+    kChannelByte,
+    kChannelNibble
+};
+
+// The track commands. The command numbers are those of the low nibble in the kChannelNibble format.
+enum Command : uint8_t
+{
+    kCmdTempo = 0,    // 3 bytes: microseconds per quarter note
+    kCmdDelay1 = 1,   // 1 byte: ticks to the next command
+    kCmdDelay2 = 2,   // 2 bytes
+    kCmdDelay3 = 3,   // 3 bytes
+    kCmdNoteOnB = 4,  // the same as kCmdNoteOn
+    kCmdNoteOn = 5,   // key, velocity
+    kCmdNoteOff = 6,  // key, velocity (ignored)
+    kCmdControl = 7,  // controller, value
+    kCmdProgram = 8,  // program
+    kCmdPressure = 9, // 1 byte, ignored
+    kCmdBend = 10,    // 2 bytes: a 16-bit pitch bend, centred on 0x2000
+    kCmdEnd = 11,     // the end of the track
+    kCmdNop = 12,     // does nothing
+    kCommandCount
+};
+
+// The controllers the driver reacts to.
+constexpr int kCtrlModulation = 1;
+constexpr int kCtrlVolume = 7;
+constexpr int kCtrlLoopStart = 102;
+constexpr int kCtrlLoopEnd = 103;
+constexpr int kCtrlMonoOn = 126;
+constexpr int kCtrlPolyOn = 127;
+
+// A tune's header: 5 words.
+struct TuneHeader
+{
+    uint32_t address = 0;
+    uint32_t track_count = 0;
+    uint32_t ticks_per_quarter = 0;
+    uint32_t track_list = 0;  // the tracks' start addresses, one word each
+    uint32_t program_map = 0; // 128 bytes: each MIDI program's instrument, or 0xFF
+    uint32_t instruments = 0; // the instrument table: a word for each instrument
+    std::vector<uint32_t> tracks;
+};
+
+// Reads the header at `address`. Returns false if it isn't a plausible tune header: 1-16 tracks, a tick length from 1
+// to 0x7FFF and tables in the ROM.
+bool ReadTuneHeader(const Rom& rom, uint32_t address, TuneHeader& header);
+
+// A decoded track command.
+struct Event
+{
+    uint32_t address = 0;
+    uint8_t size = 0;    // bytes, including the command's own
+    uint8_t command = 0; // a Command
+    uint8_t channel = 0;
+    uint8_t a = 0, b = 0; // the first two argument bytes: key and velocity, controller and value, program
+    uint32_t value = 0;   // a delay, tempo or pitch bend
+};
+
+// Decodes the command at `address`. Returns false if its command number is unknown or it runs past the ROM's end.
+bool DecodeEvent(const Rom& rom, uint32_t address, Format format, Event& event);
+
+// Returns a description of a command for listings, such as "note on ch 2 key 60 vel 100".
+std::string DescribeEvent(const Event& event);
+
+// A track's loop and end, in ticks, read from its commands without timing them.
+struct TrackLayout
+{
+    bool loops = false;
+    uint64_t loop_start = 0; // loop start tick
+    uint64_t loop_end = 0;   // tick at which the track returns to the loop start
+    uint64_t end = 0;        // end tick for a track without a loop
+};
+
+// Reads the loop and end of the track at `address`. A loop ends at the first loop end controller after a loop start.
+TrackLayout ScanTrack(const Rom& rom, uint32_t address, Format format);
+
+// The kinds of instrument.
+constexpr uint32_t kInstSample = 0x20;
+constexpr uint32_t kInstSampleB = 0x21; // played the same as kInstSample
+constexpr uint32_t kInstDrumKit = 0x22;
+constexpr uint32_t kInstKeySplit = 0x23;
+
+// The loop modes of a sample instrument. The mixer plays modes 3 and 4 the same as 1 and 2, and the driver frees a
+// voice in mode 3 as soon as it's moved past the sample's end.
+constexpr uint32_t kLoopOnce = 1;
+constexpr uint32_t kLoopForward = 2;
+constexpr uint32_t kLoopOnceB = 3;
+constexpr uint32_t kLoopForwardB = 4;
+
+// An instrument: 17 words. A sample instrument plays a sample of signed 8-bit PCM. A drum kit or key split picks one of
+// its instruments for each key from its key map, and a drum kit plays that instrument at its own root key.
+struct Instrument
+{
+    uint32_t address = 0;
+    uint32_t type = 0;
+    uint32_t loop_mode = 0;
+    uint32_t rate = 0; // Hz
+    uint32_t root_key = 0;
+    uint32_t start = 0;
+    uint32_t loop_length = 0; // the loop is the last loop_length bytes before the end
+    uint32_t end = 0;
+    uint32_t key_map = 0;      // a drum kit's or key split's 128 bytes: each key's instrument
+    uint32_t key_table = 0;    // the instruments that key_map numbers
+    uint32_t attack = 0;       // 0-99, and 99 is instant
+    uint32_t decay = 0;        // 0-99, an index into the fade times table
+    uint32_t sustain = 0;      // 0-99, a level
+    uint32_t release = 0;      // 0-99, an index into the fade times table
+    int32_t fine_tune = 0;     // cents
+    int32_t bend_range = 0;    // semitones
+    uint32_t vibrato_rate = 0; // added to the vibrato phase each frame, a 24-bit fraction of a cycle
+    int32_t vibrato_depth = 0; // the vibrato's depth scale
+
+    bool IsSample() const
+    {
+        return type == kInstSample || type == kInstSampleB;
+    }
+
+    // Returns true if the mixer loops the sample.
+    bool Loops() const
+    {
+        return loop_mode == kLoopForward || loop_mode == kLoopForwardB;
+    }
+
+    bool IsSplit() const
+    {
+        return type == kInstDrumKit || type == kInstKeySplit;
+    }
+};
+
+// Reads the instrument at `address`. Returns false if it isn't in the ROM.
+bool ReadInstrument(const Rom& rom, uint32_t address, Instrument& instrument);
+
+// Returns true if a sample instrument's sample is in the ROM and its loop fits in it, with the byte after the end that
+// the driver's interpolation reads.
+bool SampleValid(const Rom& rom, const Instrument& instrument);
+
+// Returns the address of the instrument that key `key` of a drum kit or key split plays, or 0 if its key map has no
+// instrument for the key.
+uint32_t SplitInstrument(const Rom& rom, const Instrument& split, int key);
+
+} // namespace supergbamidi::rare

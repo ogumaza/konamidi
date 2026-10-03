@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 
-#include "sequencer.h"
+#include "konami/sequencer.h"
 
 #include <algorithm>
 #include <cstdio>
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 namespace
 {
@@ -749,7 +749,7 @@ Wct2004Sequencer::Next Wct2004Sequencer::RunCommand(int track, const Command& c,
             return Next::kRestart;
         }
 
-        // The driver silences every track on the next frame, and konamidi ends the song here.
+        // The driver silences every track on the next frame, and supergbamidi ends the song here.
         stopped_ = true;
         silence();
         return Next::kStop;
@@ -765,7 +765,7 @@ Wct2004Sequencer::Next Wct2004Sequencer::RunCommand(int track, const Command& c,
 
     case Op::kCall:
         {
-            // The call plays commands from the track's own data, from its start in the song table, with the delay
+            // The call plays commands from the track's data, from its start in the song table, with the delay
             // before each. 9F plays `count` commands. The other opcodes also set the duty byte or the wave, as 00-8F
             // do, and that counts as the call's first command.
             t.saved_start = t.start;
@@ -824,7 +824,7 @@ Wct2004Sequencer::Next Wct2004Sequencer::RunCommand(int track, const Command& c,
 
     case Op::kPairVolumes:
         // Put the high nibble in the next track's output record to set its voice's volume. That track has already
-        // run this frame. After the last track, this would overwrite the driver's own variables.
+        // run this frame. After the last track, this would overwrite the driver's variables.
         t.vol = uint8_t(c.value & 15);
         if (track + 1 < header_.tracks)
         {
@@ -833,7 +833,7 @@ Wct2004Sequencer::Next Wct2004Sequencer::RunCommand(int track, const Command& c,
         }
         else
         {
-            Warn(track, c.addr, "F0 on the last track writes into the driver's own variables; ignored");
+            Warn(track, c.addr, "F0 on the last track writes into the driver's variables; ignored");
         }
 
         o.b2 = t.b2;
@@ -851,7 +851,7 @@ Wct2004Sequencer::Next Wct2004Sequencer::RunCommand(int track, const Command& c,
     case Op::kInstrument:
     case Op::kVolumeScale:
     case Op::kNop:
-        // F6 and FA take effect only with tables and settings that the game gives the driver, which konamidi leaves
+        // F6 and FA take effect only with tables and settings that the game gives the driver, which supergbamidi leaves
         // out.
         break;
 
@@ -1182,7 +1182,7 @@ DungeonDiceSequencer::Next DungeonDiceSequencer::RunCommand(int track, const Com
             return Next::kRestart;
         }
 
-        // The driver silences every track on the next frame, and konamidi ends the song here. The track ends first.
+        // The driver silences every track on the next frame, and supergbamidi ends the song here. The track ends first.
         stopped_ = true;
         [[fallthrough]];
 
@@ -1241,7 +1241,7 @@ DungeonDiceSequencer::Next DungeonDiceSequencer::RunCommand(int track, const Com
         break;
 
     case Op::kCall:
-        // The call plays commands from the track's own data, from its start in the song table, with the delay before
+        // The call plays commands from the track's data, from its start in the song table, with the delay before
         // each. F5 starts with the command in its last byte, which counts as the call's first, and the delay after the
         // call is read from that byte too.
         t.saved_start = t.start;
@@ -1265,7 +1265,7 @@ DungeonDiceSequencer::Next DungeonDiceSequencer::RunCommand(int track, const Com
 
     case Op::kSampleBend:
         {
-            // The bend is from the note's pitch, or from note 24, a sample's own rate, after a sample map note. A note
+            // The bend is from the note's pitch, or from note 24, a sample's rate, after a sample map note. A note
             // that starts this frame starts at the pitch, and otherwise the track's pitch becomes the period, which the
             // output stage hands to the voice's FIFO at once.
             Track* u = c.opcode & 1 ? NextTrack(track, c) : &t;
@@ -1409,7 +1409,7 @@ DungeonDiceSequencer::Track* DungeonDiceSequencer::NextTrack(int track, const Co
     }
 
     char buf[80];
-    std::snprintf(buf, sizeof buf, "%02X on the last track writes into the driver's own variables; ignored", c.opcode);
+    std::snprintf(buf, sizeof buf, "%02X on the last track writes into the driver's variables; ignored", c.opcode);
     Warn(track, c.addr, buf);
 
     return nullptr;
@@ -1463,4 +1463,4 @@ void DungeonDiceSequencer::PerFrame(int track)
     o.vol = t.vol;
 }
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

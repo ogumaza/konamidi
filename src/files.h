@@ -12,17 +12,19 @@
 #include <string_view>
 #include <vector>
 
-namespace konamidi
+namespace supergbamidi
 {
 
 inline std::filesystem::path PathFromUtf8(const std::string& s)
 {
-    return std::filesystem::u8path(s);
+    return std::filesystem::path(std::u8string(s.begin(), s.end()));
 }
 
 inline std::string Utf8(const std::filesystem::path& p)
 {
-    return p.u8string(); // std::string in C++17
+    const std::u8string s = p.u8string();
+
+    return std::string(s.begin(), s.end());
 }
 
 // Makes a single filename component valid on Windows as well as macOS and Linux. Keeps UTF-8 characters intact.
@@ -57,8 +59,8 @@ inline std::string SafeFileName(std::string name)
     }
     const std::string number = device.size() > 3 ? device.substr(3) : "";
     const bool numbered = (device.compare(0, 3, "COM") == 0 || device.compare(0, 3, "LPT") == 0) &&
-                          ((number.size() == 1 && number[0] >= '1' && number[0] <= '9') || number == u8"¹" ||
-                           number == u8"²" || number == u8"³");
+                          ((number.size() == 1 && number[0] >= '1' && number[0] <= '9') || number == "\xC2\xB9" ||
+                           number == "\xC2\xB2" || number == "\xC2\xB3");
     if (device == "CON" || device == "PRN" || device == "AUX" || device == "NUL" || numbered)
     {
         name.insert(name.begin(), '_');
@@ -98,4 +100,4 @@ inline bool WriteFile(const std::string& path, const std::vector<uint8_t>& data,
     return true;
 }
 
-} // namespace konamidi
+} // namespace supergbamidi

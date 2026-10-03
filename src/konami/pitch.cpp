@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-#include "pitch.h"
+#include "konami/pitch.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 namespace
 {
@@ -159,4 +159,4 @@ int NearestKey(double hz)
     return std::clamp(int(std::lround(69.0 + 12.0 * std::log2(hz / 440.0))), 0, 127);
 }
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

@@ -31,7 +31,7 @@
 
 #include <algorithm>
 
-namespace konamidi
+namespace supergbamidi
 {
 namespace
 {
@@ -508,4 +508,4 @@ bool ZlibDecompress(const uint8_t* data, size_t size, std::vector<uint8_t>& out,
     return true;
 }
 
-} // namespace konamidi
+} // namespace supergbamidi

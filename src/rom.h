@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace konamidi
+namespace supergbamidi
 {
 
 constexpr uint32_t kRomBase = 0x08000000;
@@ -108,4 +108,4 @@ private:
     std::string library_;
 };
 
-} // namespace konamidi
+} // namespace supergbamidi

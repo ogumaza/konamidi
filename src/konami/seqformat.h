@@ -9,7 +9,7 @@
 //     <delay> { <command> <delay> }*
 //
 // where <delay> is a frame count (see ReadDelay) and <command> is one of the opcodes in the Op enum below. The
-// revisions of the driver read different commands and delays. See docs/FORMAT.md for the full description.
+// revisions of the driver read different commands and delays. See docs/konami.md for the full description.
 
 #pragma once
 
@@ -19,10 +19,10 @@
 
 #include "rom.h"
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 
-constexpr int kTracks = 16;   // the most tracks a song has
+constexpr int kTracks = 16;   // maximum tracks per song
 constexpr int kPsgTracks = 4; // tracks 0..3
 
 inline bool IsPsgTrack(int t)
@@ -30,7 +30,7 @@ inline bool IsPsgTrack(int t)
     return t < kPsgTracks;
 }
 
-// The revisions of the driver that konamidi reads. They differ in their commands and delays, and in how they play
+// The revisions of the driver that supergbamidi reads. They differ in their commands and delays, and in how they play
 // them.
 enum class Revision
 {
@@ -151,11 +151,11 @@ bool ReadSongHeader(const Rom& rom, uint32_t song_table, int song, Revision revi
 
 // Walks one track linearly from its start, following the F3 rebasing rule, until an end/jump command, an unknown
 // opcode, or `max_commands`. Calls `visit(cmd, frame)` for each command (and each delay). A call (kCall) is walked
-// past, not followed. Returns true if the track ended with a command that ends it.
+// past, not followed. Returns true if the track reached an end command.
 bool WalkTrack(const Rom& rom, const SongHeader& song, int track, Revision revision,
                const std::function<void(const Command&, uint32_t frame)>& visit, uint32_t max_commands = 200000);
 
 // Returns a human-readable form of a command on the given track of a song of revision `revision`.
 std::string Describe(const Command& c, int track, Revision revision);
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

@@ -28,7 +28,7 @@ def _load_gsf(path, image, depth=0):
     reserved, size = struct.unpack('<II', data[4:12])
     program_pos = 16 + reserved
     tags = _psf_tags(data, program_pos + size)
-    # _lib first, then the file's own program on top of it, then _lib2, _lib3 and so on up to the first one missing.
+    # _lib first, then the file's program on top of it, then _lib2, _lib3 and so on up to the first one missing.
     if tags.get('_lib'):
         _load_gsf(path.parent / tags['_lib'], image, depth + 1)
     if size:

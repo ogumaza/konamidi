@@ -1,10 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
 
-# Stands in for konamidi in droplet_test.applescript. For each file it prints what konamidi prints,
+# Stands in for the program in droplet_test.applescript. For each file it prints what the program prints,
 # picked by the file's name: good.gba converts, one of partial.gba's songs can't be written, bad.gba
-# has no Konami driver, set-01.minigsf converts its set, and set-02.minigsf holds the same music.
-# Like konamidi, it exits with 1 if anything failed.
+# has no driver, set-01.minigsf converts its set, and set-02.minigsf holds the same music.
+# Like the program, it exits with 1 if anything failed.
 
 status=0
 first=1
@@ -41,8 +41,8 @@ for path in "$@"; do
         echo "$name: same music as set.gsflib, already converted"
         ;;
     *)
-        echo "$name: no Konami sound driver found: this game's music uses another engine, or a driver" \
-             "version konamidi doesn't know" >&2
+        echo "$name: no Konami or Rare sound driver found: this game's music uses another engine, or a" \
+             "driver version supergbamidi doesn't know" >&2
         status=1
         ;;
     esac

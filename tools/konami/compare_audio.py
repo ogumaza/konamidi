@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 
-"""Compare two renders of the same music (e.g. driver_emu.py against fluidsynth).
+"""Compare two renders of the same music, such as output from driver_emu.py and FluidSynth.
 
     compare_audio.py REFERENCE.wav CANDIDATE.wav
 

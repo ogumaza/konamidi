@@ -1,18 +1,21 @@
-# konamidi
+# supergbamidi
 
-`konamidi` converts music from Konami Game Boy Advance games to MIDI files
-and SoundFonts.
+`supergbamidi` converts the music of Game Boy Advance games that use Konami's
+or Rare's sound driver to MIDI files and SoundFonts.
 
-Some of Konami's GBA titles don't use Nintendo's standard sound engine (MP2K,
-the "Sappy" engine), so the usual tools such as Sappy, gba-mus-ripper and
-agbplay can't read them. `konamidi` finds Konami's own driver in a ROM,
-converts each song to a Standard MIDI File, and builds a matching SoundFont
-from the game's samples and Game Boy PSG waveforms.
+These games don't use Nintendo's standard sound engine (MP2K, the "Sappy"
+engine), so the usual tools such as Sappy, gba-mus-ripper and agbplay can't
+read them. `supergbamidi` finds the game's driver in a ROM, converts each song
+to a Standard MIDI File, and builds a matching SoundFont from the game's
+samples and instruments. For Konami's driver, it also includes Game Boy PSG
+waveforms.
 
 ## Supported games
 
-The tool was developed on *Yu-Gi-Oh! Ultimate Masters Edition: World
-Championship Tournament 2006*, and it supports these games too:
+### Konami's driver
+
+This part of the tool was developed on *Yu-Gi-Oh! Ultimate Masters Edition:
+World Championship Tournament 2006*, and it supports these games too:
 
 * *Shaman King: Master of Spirits*
 * *Shaman King: Master of Spirits 2*
@@ -30,29 +33,40 @@ These are supported too:
 * *Yu-Gi-Oh! Worldwide Edition: Stairway to the Destined Duel*
 * *Yu-Gi-Oh! Dungeon Dice Monsters*
 
-The driver is located from its own code rather than from fixed addresses, so
-other Konami games that use the same driver revisions should work too. Their
-songs may still use unsupported commands. An unknown command stops the track
-and produces a warning. `--info` lists the detected tables and any assumptions
-made during detection. You can also supply table addresses with the override
-options.
+The tool reports unrecognised revisions of Konami's driver.
 
-If a game has a revision of the driver that the tool doesn't know, it says so.
+### Rare's driver
+
+* *Donkey Kong Country*
+* *Donkey Kong Country 2*
+* *Banjo-Kazooie: Grunty's Revenge*
+* *Banjo-Pilot*
+* *Sabre Wulf*
+* *It's Mr. Pants*
+
+### Other games
+
+Each driver is located from its own code rather than from fixed addresses, so
+other games that use the same driver revisions should work too. Their songs
+may still use unsupported commands. An unknown command stops the track and
+produces a warning. `--info` names the driver it found and lists the detected
+tables and any assumptions made during detection. If detection fails, you can
+name the driver and supply table addresses with the override options.
 
 ## Building
 
-For 64-bit Windows, download the zip containing `konamidi.exe` from GitHub
-Releases.
+For 64-bit Windows, download the zip containing `supergbamidi.exe` from
+GitHub Releases.
 
-You need a C++17 compiler and CMake 3.20 or later. There are no other
+You need a C++20 compiler and CMake 3.20 or later. There are no other
 dependencies.
 
 * **Windows:** Visual Studio 2022 or later with the "Desktop development with
   C++" workload, which includes CMake. MinGW-w64 works too.
 * **macOS:** the Xcode command line tools (`xcode-select --install`) and CMake,
   for example from Homebrew (`brew install cmake`).
-* **Linux:** GCC or Clang, and CMake from your distribution, for example
-  `sudo apt install build-essential cmake` on Debian and Ubuntu.
+* **Linux:** GCC 10 or Clang 10 or later, and CMake from your distribution,
+  for example `sudo apt install build-essential cmake` on Debian and Ubuntu.
 
 Then, in the source folder:
 
@@ -62,24 +76,24 @@ cmake --build build --config Release
 ctest --test-dir build -C Release
 ```
 
-The binary is `build/konamidi` (`konamidi.exe` on Windows). Visual Studio
-and Xcode builds put it in `build/Release/` instead. On macOS the build also
-makes `build/Konamidi.app`, which you can drop files on.
+The binary is `build/supergbamidi` (`supergbamidi.exe` on Windows). Visual
+Studio and Xcode builds put it in `build/Release/` instead. On macOS the build
+also makes `build/Supergbamidi.app`, which you can drop files on.
 
 `ctest` runs the unit tests, and on macOS it also checks the report that
-`Konamidi.app` puts together from konamidi's output. CI builds konamidi and
-runs the tests on Windows, macOS and Linux.
+`Supergbamidi.app` puts together from the program's output. CI builds
+supergbamidi and runs the tests on Windows, macOS and Linux.
 
 ## Usage
 
 ```sh
-konamidi game.gba
+supergbamidi game.gba
 ```
 
-This writes one `.mid` and one `.sf2` per song to a folder named after the
-input, next to it: for example `game/game_00.mid` and `game/game_00.sf2`. Give
-several files to convert them together. Characters that Windows forbids in
-filenames are replaced with underscores. Trailing dots and spaces are removed,
+This writes one `.mid` and one `.sf2` per song to a folder beside the input
+file, with the same name: for example `game/game_00.mid` and
+`game/game_00.sf2`. Pass several files to convert them together. Characters
+that Windows forbids in filenames are replaced with underscores. Trailing dots and spaces are removed,
 and reserved device names such as `CON` get an underscore prefix.
 
 Input can be a raw `.gba` ROM or a GSF rip (`.gsflib`, `.minigsf` or `.gsf`).
@@ -88,17 +102,17 @@ library is loaded from the same folder and supplies the output name. If you
 pass several `.minigsf` files from one set, the library is converted once.
 Conversion includes all songs in the ROM, regardless of the GSF's selected song.
 
-Use a ROM if you have one. A GSF rip keeps only the bytes used during playback.
-If every song cuts a sample short, the unused part is silent in the resulting
-SoundFont.
+Use a ROM if you have one. A GSF rip keeps only the bytes used during playback,
+so a song that the rip didn't play may be missing, and if every song cuts a
+sample short, the unused part is silent in the SoundFont.
 
 ### Drag and drop
 
-* **Windows:** drop `.gba`, `.gsflib` or `.minigsf` files on `konamidi.exe`.
-  A console window shows what was converted and stays open until you press
-  Enter.
-* **macOS:** drop them on `Konamidi.app`, or open it and choose them. It then
-  shows what was converted and offers to open the output folders.
+* **Windows:** drop `.gba`, `.gsflib` or `.minigsf` files on
+  `supergbamidi.exe`. A console window shows what was converted and stays open
+  until you press Enter.
+* **macOS:** drop them on `Supergbamidi.app`, or open it and choose them. It
+  then shows what was converted and offers to open the output folders.
 
 Each file's results go in a folder next to it, as above.
 
@@ -109,14 +123,22 @@ Each file's results go in a folder next to it, as above.
 | `-o, --output DIR` | output directory (default: a folder next to each input, named like the output files) |
 | `-n, --name NAME` | base name of the output files (default: input name) |
 | `-s, --songs LIST` | only these songs, e.g. `0,3,7-9` |
-| `-l, --loops N` | play a looping song's loop section N times (default 2) |
-| `-t, --tracks LIST` | only these tracks: 0-3 are the PSG channels, 4 and up the sample voices |
-| `--single-sf2` | one SoundFont for all songs; each song's instruments are in bank = song number |
+| `-l, --loops N` | play each song's loop N times (default 2) |
+| `-t, --tracks LIST` | only these tracks, e.g. `4-15`; in Konami's driver, 0-3 are the PSG channels and 4 and up the sample voices |
+| `--single-sf2` | one SoundFont for all songs (see [Output](#output) for its banks) |
 | `--dump` | also write a text listing of every command of each song (`NAME_NN.txt`) |
-| `--info` | print the driver tables found and a list of songs, then exit |
-| `--song-table ADDR`, `--song-count N`, `--sample-table ADDR`, `--mix-rate HZ` | override detection |
+| `--info` | print the driver and tables found and a list of songs, then exit. The track count, length and loop reflect the current conversion options |
+| `--driver NAME` | use `konami` or `rare` instead of detecting the driver |
+| `--song-table ADDR`, `--song-count N` | override detection: the song table's address (hex) and the number of songs |
+| `--sample-table ADDR`, `--mix-rate HZ` | override detection in Konami's driver: the sample table's address (hex) and the mixer's rate |
 | `-q, --quiet` | only print warnings and errors |
-| `--trace SONG`, `--trace-frames N` | print the sequencer's raw per-frame output (for `tools/compare_trace.py`) |
+| `--trace SONG`, `--trace-frames N` | print the driver model's state after each frame (for the driver's `compare_trace.py` in `tools/`) |
+
+Detection looks for Rare's driver first, because it's found from its code
+alone, and then for Konami's. With `--song-table` but no `--driver`, the table
+goes to whichever driver detection finds, so a game whose driver isn't
+recognised needs `--driver` as well. `--sample-table` and `--mix-rate` imply
+`--driver konami`.
 
 To listen, load the pair into any SoundFont player, for example:
 
@@ -126,23 +148,23 @@ fluidsynth -ni -F song10.wav game/game_10.sf2 game/game_10.mid
 
 ## Output
 
-### MIDI
+Songs that loop are written with the loop played twice by default. The loop is
+also marked with `loopStart` and `loopEnd` marker events, which loop-aware
+players honour.
+
+### MIDI from Konami's driver
 
 Each MIDI file has a conductor track and one track per game track that plays
 notes. Tracks are named `Square 1`, `Square 2`, `Wave`, `Noise`, and
 `Voice 0`-`Voice 11` (game tracks 4-15, which play the driver's voices 0-11).
 The older Rave Master, Eternal Duelist and Dungeon Dice Monsters revisions have
-8, 6 and 4 voices.
-MIDI channel 10 is used only if a song needs all 16 channels.
+8, 6 and 4 voices. MIDI channel 10 is used only if a song needs all 16
+channels.
 
 The game counts time in frames, so one MIDI tick is one frame (1/59.73 s) and
 every event is exactly on the frame the game plays it. The game doesn't store
-a tempo, so `konamidi` estimates the beat length from the note spacing. This
-only affects how bars line up in an editor.
-
-Songs that loop are written with the loop played twice by default. The loop is
-also marked with `loopStart` and `loopEnd` marker events, which loop-aware
-players honour.
+a tempo, so `supergbamidi` estimates the beat length from the note spacing.
+This only affects how bars line up in an editor.
 
 The game's controls map to MIDI like this:
 
@@ -168,7 +190,7 @@ pitch bend of the current note. A series of these notes can span more than
 In the Dungeon Dice Monsters revision, songs set separate left and right PSG
 volumes. These are included in each PSG track's CC10 and CC11 values.
 
-### SoundFont
+### SoundFont from Konami's driver
 
 Each song's SoundFont contains exactly the instruments that song uses.
 
@@ -190,16 +212,76 @@ Each song's SoundFont contains exactly the instruments that song uses.
 
 Samples keep the game's rate and loop points.
 
+With `--single-sf2`, each song's instruments are in the bank numbered after the
+song.
+
+### MIDI from Rare's driver
+
+The tune format resembles MIDI: note, controller, program and pitch bend
+commands on 16 MIDI channels, separated by delays in ticks. The MIDI file
+keeps the tune's ticks per quarter note, channels, keys, velocities, programs
+and volumes (controller 7). Each source track that plays notes gets a MIDI
+track named `Track 0`, `Track 1` and so on. A separate first track holds the
+tempo and loop markers.
+
+The driver counts each frame as 1/60 s, but the GBA shows 59.73 frames a
+second, so the games play every tune 0.46% slower than its tempo says. The
+MIDI file's tempos are slowed down to match.
+
+The MIDI file follows what the driver plays, where that differs from the
+tune's commands:
+
+* The driver plays a note in one of a few slots for its channel, and drops a
+  note that finds them all playing. The MIDI file leaves such notes out, and
+  ends each note where the driver's slot stops playing it, such as when a note
+  in mono mode (controller 126) cuts off the one before.
+* A note off releases only one note with that key on the channel. Since a
+  MIDI channel can't play the same key twice at once, the conversion ends
+  the older note when the newer one starts.
+* The driver's vibrato (controller 1) is written out as pitch bends, a frame
+  at a time, together with the tune's bends. Each channel's bend range is
+  set with RPN 0 to fit the bends and the vibrato.
+* A note that a track plays on the same tick as a program change gets the
+  program that the driver plays it with.
+
+### SoundFont from Rare's driver
+
+Each tune's SoundFont has a preset for each program the tune plays, named
+`Program N` and with the same number, in bank 0. Programs played on channel 10,
+which General MIDI players keep for drums, are in bank 128 as well, so that
+such players play the same instruments there.
+
+* **Samples** are the game's 8-bit samples, widened to 16 bits, with their
+  rate, root key, fine tune and loop. A very short loop is repeated until it's
+  at least 32 points long, since some players can't play shorter ones.
+* **Drum kits and key splits** become a zone for each range of keys that plays
+  the same instrument. A drum kit's zones play their samples at their own
+  pitch on every key, as the driver does.
+* **Envelopes** follow the driver's attack, decay, sustain and release. The
+  driver's fades are straight lines in level, where a SoundFont's are straight
+  lines in decibels, so decays and releases are stretched to keep the
+  loudness close.
+* **Volume and velocity** scale the level in a straight line, as in the
+  driver, through modulators in each instrument. The SoundFont default would
+  square them.
+
+With `--single-sf2`, the tunes that use the first tune's instruments use bank
+0, and each other set of instruments gets a bank of its own, which the tunes
+select with a bank change at the start.
+
 ### Sequence listing (`--dump`)
 
-The listing shows every command of every track with its address, frame, raw
-bytes, meaning and following delay. It's the quickest way to study a song or
-to check the format documentation against real data.
+The listing shows every track command with its address, raw bytes and meaning.
+For Konami's driver, it includes the frame and the delay after the command;
+for Rare's, it includes the tick. Use it to study a song or check the format
+documentation against real data.
 
 ## Accuracy
 
 Some things differ from the hardware, or can't be expressed in MIDI and
-SoundFonts:
+SoundFonts.
+
+### Konami's driver
 
 * **PSG tuning.** The Game Boy's 11-bit frequency registers can't hit every
   pitch, so the game plays its high PSG notes slightly out of tune. The
@@ -219,18 +301,36 @@ SoundFonts:
   SoundFont uses the same waveforms without the DC offset, which the hardware's
   output capacitor removes anyway.
 
+### Rare's driver
+
+* **Voice limit.** The driver mixes at most 8 voices at a time and leaves the
+  rest silent until voices free up. A SoundFont player plays every note, so a
+  busy passage can have notes in the MIDI file that the game doesn't let you
+  hear.
+* **Envelopes.** The SoundFont's envelopes approximate the driver's straight
+  fades, and some players treat very short envelope phases differently.
+* **Timing.** The driver runs once a frame, so it plays every event on a frame
+  boundary. The MIDI file keeps each event on its own tick, which can be up to
+  a frame earlier.
+* **Mixer character.** The driver mixes in mono at 13379 Hz with linear
+  interpolation, and writes 8-bit output. A SoundFont player plays the same
+  samples more cleanly, and the MIDI files leave every channel in the centre.
+* **Sound effects** aren't converted. The driver plays them from a separate
+  table, which only the game's code uses.
+
 ## Internals
 
-`docs/FORMAT.md` documents the driver and its data formats in full, including
-how the tool locates them.
+`docs/konami.md` and `docs/rare.md` document the two drivers and their data
+formats in full, including how the tool locates them. The code for each is in
+`src/konami/` and `src/rare/`, behind the interface in `src/music.h`.
 
-`tools/` holds the scripts used to reverse engineer the driver and validate the
-conversion: a disassembler, a harness that runs the game's own driver under an
-ARM emulator, and comparison scripts. See `tools/README.md`.
+`tools/` holds the scripts used to reverse engineer the drivers and validate
+the conversion: a disassembler, harnesses that run each game's driver
+under an ARM emulator, and comparison scripts. See `tools/README.md`.
 
 ## License
 
-`konamidi` is released under the MIT License; see `LICENSE`. The DEFLATE
+`supergbamidi` is released under the MIT License; see `LICENSE`. The DEFLATE
 decoder in `src/inflate.cpp` is adapted from Mark Adler's puff under the zlib
 license. Its notice is in that file and in `THIRD_PARTY_NOTICES`. Game data is
 not covered by these licenses.

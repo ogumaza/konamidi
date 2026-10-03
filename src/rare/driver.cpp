@@ -1,0 +1,437 @@
+// SPDX-License-Identifier: MIT
+
+#include "rare/driver.h"
+
+#include <cstdio>
+
+namespace supergbamidi::rare
+{
+namespace
+{
+
+// Returns an approximation of the driver's fade table, for a ROM in which detection doesn't find the table. A decay or
+// release with index i takes entry i + 1 frames, or none if the entry is 0. The entries fall by about 10% an index from
+// 254 at index 0 to 88 at index 10, then by about 3% an index to 7 at index 90, and then in a straight line to 0 at
+// index 99, which follows the driver's table to within about 10%. It's worked out in 16.16 fixed point, so it's the
+// same everywhere.
+std::array<uint8_t, 100> ApproximateFadeTable()
+{
+    std::array<uint8_t, 100> table = {};
+    uint32_t entry = 254u << 16;
+    for (uint32_t i = 0; i < 100; i++)
+    {
+        if (i >= 90)
+        {
+            entry = (7 * (99 - i) << 16) / 9;
+        }
+
+        table[i] = uint8_t((entry + 0x8000) >> 16);
+        entry = uint32_t((uint64_t(entry) * (i < 10 ? 58945u : 63495u)) >> 16);
+    }
+
+    return table;
+}
+
+// A mix rate that the driver's rate routine knows: the samples it mixes a frame and the pitch scale it uses.
+struct RateSetting
+{
+    int rate;
+    int samples_per_frame;
+    uint32_t scale;
+};
+
+constexpr RateSetting kRateSettings[] = {
+    {10512, 176, 0x018F0064}, {13379, 224, 0x01397FC3}, {18157, 304, 0x00E70086}, {21024, 352, 0x00C78032}};
+
+// Maximum number of tunes to read during detection.
+constexpr int kMaxTunes = 1024;
+
+// The ARM instructions that detection looks for in the driver's code, which the init copies to IWRAM.
+constexpr uint32_t kReadCommand = 0xE4DB0001;  // ldrb r0, [fp], #1
+constexpr uint32_t kDispatch = 0xE79C0100;     // ldr r0, [ip, r0, lsl #2]
+constexpr uint32_t kChannelShift = 0xE1A01220; // lsr r1, r0, #4
+constexpr uint32_t kCommandMask = 0xE3C000F0;  // bic r0, r0, #0xF0
+constexpr uint32_t kPitchIndex = 0xE0862103;   // add r2, r6, r3, lsl #2
+constexpr uint32_t kSineIndex = 0xE0866101;    // add r6, r6, r1, lsl #2
+constexpr uint32_t kFadeLookup = 0xE7D21001;   // ldrb r1, [r2, r1]
+constexpr uint32_t kLdrPcMask = 0xFFFFF000;    // ldr rX, [pc, #imm12], without the offset
+constexpr uint32_t kLdrR6Pc = 0xE59F6000;
+constexpr uint32_t kLdrR4Pc = 0xE59F4000;
+constexpr uint32_t kLdrR2Pc = 0xE59F2000;
+constexpr uint32_t kLoadR4 = 0xE5944000; // ldr r4, [r4]
+
+// The size of a note slot in the driver's RAM.
+constexpr uint32_t kSlotSize = 0x28;
+
+std::string Hex(uint32_t v)
+{
+    char b[16];
+    std::snprintf(b, sizeof b, "0x%08X", unsigned(v));
+
+    return b;
+}
+
+// Returns the word that the Thumb instruction `ldr rX, [pc, #imm]` at `at` loads.
+uint32_t ThumbLiteral(const Rom& rom, uint32_t at)
+{
+    return rom.U32(((at + 4) & ~3u) + (rom.U16(at) & 0xFFu) * 4);
+}
+
+// Returns true if the halfword is `ldr r<reg>, [pc, #imm]`.
+bool IsLdrLiteral(uint16_t h, int reg)
+{
+    return (h >> 8) == (0x48 | reg);
+}
+
+// Returns true if a Thumb BL instruction starts at `at`.
+bool IsBl(const Rom& rom, uint32_t at)
+{
+    return (rom.U16(at) & 0xF800) == 0xF000 && (rom.U16(at + 2) & 0xF800) == 0xF800;
+}
+
+// The driver's init, as found from its copy of the driver's code to IWRAM.
+struct InitCode
+{
+    uint32_t start = 0; // the routine's first instruction
+    uint32_t copy = 0;  // the copy's first instruction
+    uint32_t code = 0;  // the code it copies, in ROM
+    uint32_t code_size = 0;
+};
+
+// Finds the init's copy of the code: ldr r1, =source; ldr r2, =destination; ldr r3, =&size; ldr r3, [r3];
+// ldr r4, =limit; cmp r3, r4. Returns false if there's none.
+bool FindInitCopy(const Rom& rom, InitCode& init)
+{
+    const uint8_t* data = rom.Ptr(kRomBase);
+    const size_t size = rom.Size();
+    for (size_t o = 0; o + 12 <= size; o += 2)
+    {
+        auto h = [&](size_t i)
+        {
+            return uint16_t(data[o + 2 * i] | (data[o + 2 * i + 1] << 8));
+        };
+
+        if (!IsLdrLiteral(h(0), 1) || !IsLdrLiteral(h(1), 2) || !IsLdrLiteral(h(2), 3) || h(3) != 0x681B ||
+            !IsLdrLiteral(h(4), 4) || h(5) != 0x42A3)
+        {
+            continue;
+        }
+
+        const uint32_t at = kRomBase + uint32_t(o);
+        const uint32_t code = ThumbLiteral(rom, at);
+        const uint32_t size_at = ThumbLiteral(rom, at + 4);
+        const uint32_t code_size = rom.U32(size_at);
+        if (!rom.Contains(size_at, 4) || code_size < 0x100 || code_size > 0x8000 || !rom.Contains(code, code_size))
+        {
+            continue;
+        }
+
+        // The routine starts with push {r4-r7, lr} a little before the copy.
+        uint32_t start = at;
+        while (start > at - 0x100 && rom.U16(start) != 0xB5F0)
+        {
+            start -= 2;
+        }
+
+        init = {rom.U16(start) == 0xB5F0 ? start : at, at, code, code_size};
+        return true;
+    }
+
+    return false;
+}
+
+// Reads the table setup that follows the copy: ldr r0, =tune table variable; ldr r1, =tune table; str r1, [r0]; the
+// same for the sound effects; ldr r0, =mix rate; bl set rate; movs r0, #voices; bl set voices. Returns false if it
+// isn't there.
+bool ReadTableSetup(const Rom& rom, const InitCode& init, DriverInfo& info)
+{
+    for (uint32_t at = init.copy + 12; at < init.copy + 0x60; at += 2)
+    {
+        if (!IsLdrLiteral(rom.U16(at), 0) || !IsLdrLiteral(rom.U16(at + 2), 1) || rom.U16(at + 4) != 0x6001 ||
+            !IsLdrLiteral(rom.U16(at + 6), 0) || !IsLdrLiteral(rom.U16(at + 8), 1) || rom.U16(at + 10) != 0x6001 ||
+            !IsLdrLiteral(rom.U16(at + 12), 0) || !IsBl(rom, at + 14) || (rom.U16(at + 18) >> 8) != 0x20 ||
+            !IsBl(rom, at + 20))
+        {
+            continue;
+        }
+
+        info.tune_table = ThumbLiteral(rom, at + 2);
+        info.mix_rate = int(ThumbLiteral(rom, at + 12));
+        info.voice_limit = rom.U16(at + 18) & 0xFF;
+
+        return true;
+    }
+
+    return false;
+}
+
+// Returns the word that the ARM instruction `ldr rX, [pc, #imm12]` at `at` loads.
+uint32_t ArmLiteral(const Rom& rom, uint32_t at)
+{
+    const uint32_t insn = rom.U32(at);
+    const uint32_t offset = insn & 0xFFF;
+
+    return rom.U32((insn & 0x00800000) ? at + 8 + offset : at + 8 - offset);
+}
+
+// Finds the table that a `ldr rX, =table` just before the instruction `use` loads, in the driver's code. Returns 0 if
+// there's none.
+uint32_t FindArmTable(const Rom& rom, const InitCode& init, uint32_t load, uint32_t use)
+{
+    for (uint32_t at = init.code; at + 8 <= init.code + init.code_size; at += 4)
+    {
+        if ((rom.U32(at) & kLdrPcMask) == load && rom.U32(at + 4) == use)
+        {
+            return ArmLiteral(rom, at);
+        }
+    }
+
+    return 0;
+}
+
+// Reads the format and tables from the driver's code. Returns false if its command dispatch isn't there.
+bool ReadDriverCode(const Rom& rom, const InitCode& init, DriverInfo& info)
+{
+    bool found = false;
+    for (uint32_t at = init.code; at + 16 <= init.code + init.code_size; at += 4)
+    {
+        if (rom.U32(at) != kReadCommand)
+        {
+            continue;
+        }
+
+        if (rom.U32(at + 4) == kDispatch)
+        {
+            info.format = Format::kChannelByte;
+            found = true;
+            break;
+        }
+        if (rom.U32(at + 4) == kChannelShift && rom.U32(at + 8) == kCommandMask && rom.U32(at + 12) == kDispatch)
+        {
+            info.format = Format::kChannelNibble;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+    {
+        return false;
+    }
+
+    // The note on reads the size of a channel's slots from a word in ROM: ldr r4, =size; ldr r4, [r4];
+    // ldr r3, =slots; add r3, r3, r4.
+    const uint32_t channel_size_at = FindArmTable(rom, init, kLdrR4Pc, kLoadR4);
+    const uint32_t channel_size = rom.U32(channel_size_at);
+    if (rom.Contains(channel_size_at, 4) && channel_size % kSlotSize == 0 && channel_size >= kSlotSize &&
+        channel_size <= 16 * kSlotSize)
+    {
+        info.slots_per_channel = int(channel_size / kSlotSize);
+    }
+    else
+    {
+        info.warnings.push_back("the number of notes a channel can play wasn't found, so 6 is assumed");
+    }
+
+    info.pitch_table = FindArmTable(rom, init, kLdrR6Pc, kPitchIndex);
+    info.sine_table = FindArmTable(rom, init, kLdrR6Pc, kSineIndex);
+    if (!rom.Contains(info.pitch_table - 64 * 4, 129 * 4) || !rom.Contains(info.sine_table, 257 * 4))
+    {
+        info.pitch_table = info.sine_table = 0;
+        info.warnings.push_back(
+            "the driver's pitch and vibrato tables weren't found, so --trace can't follow the "
+            "voices' positions exactly");
+    }
+
+    const uint32_t fade = FindArmTable(rom, init, kLdrR2Pc, kFadeLookup);
+    if (rom.Contains(fade, 100))
+    {
+        for (uint32_t i = 0; i < 100; i++)
+        {
+            info.fade_table[i] = rom.U8(fade + i);
+        }
+    }
+    else
+    {
+        info.warnings.push_back("the driver's fade table wasn't found, so the envelopes' fades are approximate");
+    }
+
+    return true;
+}
+
+// Returns how many tunes the table at `table` has: entries up to the first that isn't a tune header.
+int CountTunes(const Rom& rom, uint32_t table)
+{
+    int count = 0;
+    TuneHeader header;
+    while (count < kMaxTunes && rom.Contains(table + 4u * uint32_t(count), 4) &&
+           ReadTuneHeader(rom, rom.U32(table + 4u * uint32_t(count)), header))
+    {
+        count++;
+    }
+
+    return count;
+}
+
+// Returns the number of commands that every track of the table's tunes decodes to in `format`, up to each track's end,
+// or -1 if a track has a command the format doesn't know or doesn't end within a million commands.
+long long CommandsInFormat(const Rom& rom, uint32_t table, int count, Format format)
+{
+    long long total = 0;
+    for (int t = 0; t < count; t++)
+    {
+        TuneHeader header;
+        ReadTuneHeader(rom, rom.U32(table + 4u * uint32_t(t)), header);
+        for (uint32_t address : header.tracks)
+        {
+            Event e;
+            int n = 0;
+            for (; n < 1000000; n++)
+            {
+                if (!DecodeEvent(rom, address, format, e))
+                {
+                    return -1;
+                }
+                if (e.command == kCmdEnd)
+                {
+                    break;
+                }
+
+                address += e.size;
+            }
+            if (n == 1000000)
+            {
+                return -1;
+            }
+
+            total += n;
+        }
+    }
+
+    return total;
+}
+
+// Infers the command format from the tracks when the driver's code is unavailable. Every track must reach its end. If
+// both formats pass, prefer the one that decodes more commands: the wrong format often reads an argument as an end.
+bool GuessFormat(const Rom& rom, DriverInfo& info)
+{
+    const long long byte = CommandsInFormat(rom, info.tune_table, info.tune_count, Format::kChannelByte);
+    const long long nibble = CommandsInFormat(rom, info.tune_table, info.tune_count, Format::kChannelNibble);
+    if (byte < 0 && nibble < 0)
+    {
+        return false;
+    }
+
+    info.format = nibble > byte ? Format::kChannelNibble : Format::kChannelByte;
+    info.warnings.push_back(std::string("the driver's code wasn't found; its tracks read as ") +
+                            (info.format == Format::kChannelNibble ? "channel-in-command" : "channel-byte") +
+                            " commands");
+
+    return true;
+}
+
+} // namespace
+
+bool DetectDriver(const Rom& rom, const DriverOverrides& overrides, DriverInfo& info, std::string& error)
+{
+    info = DriverInfo();
+    info.fade_table = ApproximateFadeTable();
+
+    // Find the init, and from it the tune table, the mixer settings and the driver's code.
+    InitCode init;
+    bool code = false;
+    if (FindInitCopy(rom, init) && ReadTableSetup(rom, init, info))
+    {
+        info.init = init.start;
+        code = ReadDriverCode(rom, init, info);
+        if (!code)
+        {
+            info.warnings.push_back("the driver's init was found, but not its command reader");
+        }
+    }
+    else
+    {
+        info.tune_table = 0;
+    }
+
+    if (overrides.tune_table)
+    {
+        info.tune_table = overrides.tune_table;
+    }
+    if (info.tune_table == 0)
+    {
+        error.clear();
+        return false;
+    }
+
+    info.tune_count = overrides.tune_count ? overrides.tune_count : CountTunes(rom, info.tune_table);
+    if (info.tune_count == 0)
+    {
+        error = "the tune table at " + Hex(info.tune_table) + " has no valid tunes";
+        return false;
+    }
+
+    if (!code && !GuessFormat(rom, info))
+    {
+        error = "the tracks of the tunes at " + Hex(info.tune_table) + " can't be read";
+        return false;
+    }
+
+    // The rate routine knows four rates.
+    bool known_rate = false;
+    for (const RateSetting& r : kRateSettings)
+    {
+        if (r.rate == info.mix_rate)
+        {
+            info.samples_per_frame = r.samples_per_frame;
+            info.rate_scale = r.scale;
+            known_rate = true;
+        }
+    }
+    if (!known_rate)
+    {
+        info.warnings.push_back("the init sets a mix rate of " + std::to_string(info.mix_rate) +
+                                " Hz, which the driver doesn't know; 13379 Hz is assumed");
+        info.mix_rate = 13379;
+        info.samples_per_frame = 224;
+        info.rate_scale = 0x01397FC3;
+    }
+
+    if (info.voice_limit < 1 || info.voice_limit > 101)
+    {
+        info.warnings.push_back("the init sets a limit of " + std::to_string(info.voice_limit) +
+                                " voices; 8 is assumed");
+        info.voice_limit = 8;
+    }
+
+    // Report what was found.
+    if (info.init)
+    {
+        info.log.push_back("driver init at " + Hex(info.init) + ", " +
+                           (info.format == Format::kChannelNibble ? "channel in each command byte"
+                                                                  : "channel in a byte after each command"));
+        info.log.push_back("mixer: " + std::to_string(info.mix_rate) + " Hz, up to " +
+                           std::to_string(info.voice_limit) + " voices, " + std::to_string(info.slots_per_channel) +
+                           " notes a channel");
+    }
+    info.log.push_back("tune table at " + Hex(info.tune_table) + ": " + std::to_string(info.tune_count) + " tune" +
+                       (info.tune_count == 1 ? "" : "s"));
+
+    return true;
+}
+
+uint32_t TuneAddress(const Rom& rom, const DriverInfo& info, int tune)
+{
+    if (tune < 0 || tune >= info.tune_count)
+    {
+        return 0;
+    }
+
+    return rom.U32(info.tune_table + 4u * uint32_t(tune));
+}
+
+int FadeFrames(const DriverInfo& info, uint32_t index)
+{
+    return index < info.fade_table.size() && info.fade_table[index] ? info.fade_table[index] + 1 : 0;
+}
+
+} // namespace supergbamidi::rare

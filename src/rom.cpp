@@ -11,7 +11,7 @@
 #include "files.h"
 #include "inflate.h"
 
-namespace konamidi
+namespace supergbamidi
 {
 namespace
 {
@@ -183,8 +183,8 @@ bool Rom::LoadGsf(const std::string& path, int depth, std::string& error)
         return Utf8(PathFromUtf8(path).parent_path() / PathFromUtf8(name));
     };
 
-    // As the PSF format specifies, _lib is loaded first, then the file's own program on top of it, then _lib2, _lib3
-    // and so on up to the first one missing, each on top of the last.
+    // As the PSF format specifies, _lib is loaded first, then the file's program on top of it, then _lib2, _lib3 and so
+    // on up to the first one missing, each on top of the last.
     if (const std::string lib = tag_value("_lib"); !lib.empty())
     {
         if (depth == 0)
@@ -296,4 +296,4 @@ std::string Rom::GameCode() const
     return s;
 }
 
-} // namespace konamidi
+} // namespace supergbamidi

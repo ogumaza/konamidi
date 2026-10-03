@@ -7,11 +7,11 @@ Advance games. It is based on the driver code in the Japanese release of
 
 Addresses given as examples are from `BY6J`. The US release, `BY6E`, has the
 same driver and data 0x90 bytes lower in ROM; its RAM addresses are the same.
-Other games place the driver and its data elsewhere; `konamidi` finds them
+Other games place the driver and its data elsewhere; `supergbamidi` finds them
 from the code (see [Locating the driver](#locating-the-driver)).
 
 *Yu-Gi-Oh! World Championship Tournament 2004* has an older revision of the
-driver, which reads other commands. [The WCT 2004
+driver, with a different command set. [The WCT 2004
 revision](#the-wct-2004-revision) describes how it differs, and [The Rave
 Master revision](#the-rave-master-revision), [The Eternal Duelist
 revision](#the-eternal-duelist-revision) and [The Dungeon Dice Monsters
@@ -19,14 +19,14 @@ revision](#the-dungeon-dice-monsters-revision) describe three still older ones.
 
 ## Architecture
 
-The driver has two halves:
+The driver has two parts:
 
 | Part | Runs | Job |
 |---|---|---|
 | Sequencer | once per frame from the VBlank interrupt (59.7275 Hz) | reads the song data, updates 16 tracks, and writes the Game Boy PSG registers and the DirectSound voice table |
 | Mixer | from the DMA1 (FIFO A) interrupt, in ARM code copied to IWRAM | mixes 12 DirectSound voices, 16 stereo samples per call, into the FIFOs |
 
-A song always has 16 tracks with fixed jobs:
+A song always has 16 tracks, each assigned to a sound channel:
 
 | Track | Channel |
 |---|---|
@@ -286,7 +286,7 @@ The sequencer starts, changes and stops voices through the 12 voice records at
 
 `level = table[volume × 64 + pan level]`, where the pan level is 0-63 for each
 side. The level is close to `volume × pan / 63`, but not exactly (it isn't a
-simple rounding of that product), so `konamidi` reads the table itself. The
+simple rounding of that product), so `supergbamidi` reads the table itself. The
 full-level column (`pan = 63`) equals the volume. In `BY6J` the table is at
 `0x084BF1B8`.
 
@@ -333,7 +333,7 @@ looks up. Note `FF`, which a song can play as if it were note -1, reads the
 word 16 KB past the table's end, and so does any pitch outside notes 0 to 104.
 Whatever data lies there sets the frequency. On a square channel, the channel
 only restarts if the word's bit 15 is set: otherwise a note that's playing goes
-on at the new frequency, and a silent channel stays silent. `konamidi` does
+on at the new frequency, and a silent channel stays silent. `supergbamidi` does
 the same.
 
 **Noise.** Each note writes `SOUND4CNT_L = volume << 12` and
@@ -355,10 +355,10 @@ settings: PSG at 100% and master volume 7).
 
 *Yu-Gi-Oh! World Championship Tournament 2004* has an older revision of the
 driver. Its song table, samples, pitch table, vibrato and PSG frequency table
-work as described above, and so does the sequencer's frame: the tracks run from
-15 down to 0, a loop runs the frame again, and a track's first frame silences
-its channel and reads its first delay. The delays and commands differ, and so do
-parts of the output stage and the mixer.
+work as described above. The sequencer also processes each frame the same way:
+tracks run from 15 down to 0, a loop runs the frame again, and a track's first
+frame silences its channel and reads its first delay. The delays and commands
+differ, as do parts of the output stage and the mixer.
 
 In `BYWP` the routines are:
 
@@ -404,11 +404,11 @@ number of frames.
 | `F3` | loop point | as in the Ultimate Masters revision |
 | `F4 rr` | attack rate | see [Attack and decay](#attack-and-decay) |
 | `F5 rr` | decay rate | see [Attack and decay](#attack-and-decay) |
-| `F6 ii` | instrument | picks the notes' samples from a table that the game can give the driver; `konamidi` ignores it |
+| `F6 ii` | instrument | picks the notes' samples from a table that the game can give the driver; `supergbamidi` ignores it |
 | `F7 ff` | echo feedback | echo bus 0 feedback = `(ff & 7F)`/256 |
 | `F8 dd` | echo delay | echo bus `dd >> 7` delay = `(dd & 7F) × 32` mixer samples |
 | `F9 vb` | echo routing | as in the Ultimate Masters revision |
-| `FA xx` | volume scale | scales the track's volumes by a setting that the game can give the driver; `konamidi` ignores it |
+| `FA xx` | volume scale | scales the track's volumes by a setting that the game can give the driver; `supergbamidi` ignores it |
 | `FB`, `FC` | - | nothing |
 | `FD` | end track | the track stops until the song loops |
 | `FE` | loop song | all tracks go back to their loop points |
@@ -469,7 +469,7 @@ Ultimate Masters revision's in these ways:
   wave RAM image for the record's wave and volume into the idle bank and
   switches banks, and sets the channel's volume code to 100%, or to 0% for
   volume 0. A bend's record holds wave 0, so a bend loads wave 0's image,
-  whatever wave the note had. Vibrato's record holds the track's own wave.
+  whatever wave the note had. Vibrato's record holds the track's wave.
 * **Noise.** The noise table is read at the track's pitch, the note × 32.
 
 ### Mixer in WCT 2004
@@ -563,7 +563,7 @@ for its own channel on both sides (`0x11 << track`), and a loop sets them back.
 next track's output record, with the retrigger byte set, since that track has
 had its turn in the frame already. The next voice then plays at volume `x`
 until its own track sets its volume again. On the last track, the next record
-would be the driver's own variables, and `konamidi` ignores it with a warning.
+would be the driver's variables, and `supergbamidi` ignores it with a warning.
 
 In `AY5E` the routines are:
 
@@ -609,7 +609,7 @@ once per frame, but most of the details differ:
   from C2 on, then 12 noise settings, and then a part for vibrato with 4
   entries for each note. The sample period table gives the timer period of
   each pitch of a sample note, from note 0 at 2500 Hz on, and its entry 0
-  stands for a sample's own rate.
+  stands for a sample's rate.
 * **Output records.** They're 12 bytes, on the stack: the pitch, duty byte,
   volume, retrigger byte and flags, and at bytes 6-7 an envelope for a square
   channel. There's no pan.
@@ -629,7 +629,7 @@ These are its commands:
 | `8x` | vibrato at depth `x`, or off at 0 |
 | `9x nn` | note `nn` of the track's sample, at volume `x`: pitch `nn × 16 + 1` |
 | `Ax nn` | `Bx nn`, played by the next track |
-| `Bx nn` | a note of the sample that entry `nn` of the sample map names, at the sample's own rate and volume `x` |
+| `Bx nn` | a note of the sample that entry `nn` of the sample map names, at the sample's rate and volume `x` |
 | `Cx` | play the track's pitch again, at volume `x` |
 | `Dx` | volume `x`, without a note |
 | `Ex nn` | PSG note `nn` at volume `x`: pitch `nn × 16`, or `nn + 1080` from note 72 on, where the noise settings are |
@@ -663,13 +663,13 @@ track jumps back to that position.
 `Ax`, `F1` and `F9` change the next track's state. That track has already run
 this frame, so `Ax` and `F1` also write to its output record. After the last
 track, these writes would reach the first sound effect track's state and the
-driver's own variables. `konamidi` ignores those commands and issues a warning.
+driver's variables. `supergbamidi` ignores those commands and issues a warning.
 
 A fade reduces the starting volume to 3/4, 1/2 and 1/4 over three frames. On
 the fourth frame it outputs duty byte 0 and volume 0. Only this last output
 reaches a PSG channel. Ended tracks still run their per-frame updates, so fades
 and volume output continue after a track ends. `FB` also gives square channels
-an envelope that lowers the volume by one step every 1/64 second. `konamidi`
+an envelope that lowers the volume by one step every 1/64 second. `supergbamidi`
 omits this envelope, which lasts three frames.
 
 Vibrato outputs a pitch every 4th frame, alternating between the note's entry
@@ -732,7 +732,7 @@ A sample track's record sets the voice's volume every frame. Flag `0x40` treats
 the record's pitch as a timer period and applies it to the voice's FIFO. A
 note-start record stops the voice at volume 0, or starts a note at any other volume.
 The duty byte selects the sample, and the pitch indexes the sample period
-table. Entry 0 uses the sample's own rate.
+table. Entry 0 uses the sample's rate.
 
 ### FIFOs in Dungeon Dice Monsters
 
@@ -751,12 +751,12 @@ A FIFO plays at its timer's rate, so both of its voices play at the rate of the
 last note started on either, or of the last bend. Starting a note on voice 0
 (or 2) also stops voice 1 (or 3), unless that voice plays at its sample's own
 rate, and a note on voice 1 (or 3) at any other rate doesn't start while voice 0
-(or 2) plays at its own. `konamidi` gives each voice the rate of its own notes
+(or 2) plays at its own. `supergbamidi` gives each voice the rate of its own notes
 and bends, and leaves these rules out.
 
 ## Locating the driver
 
-`konamidi` first finds the driver's command reader, which loads a command's
+`supergbamidi` first finds the driver's command reader, which loads a command's
 opcode and compares it with `FC`: `ldrb rX,[rY]` / `cmp rX,#0xFC` / `ble`. The
 next opcodes it compares with tell the revisions apart. The Ultimate Masters
 revision's compares `FF`, `FD`, `EF` and `FB`, the WCT 2004 revision's `FF`,
@@ -764,8 +764,8 @@ revision's compares `FF`, `FD`, `EF` and `FB`, the WCT 2004 revision's `FF`,
 Eternal Duelist revision's `FF`, `FE`, `EF` and `F3`, and the Dungeon Dice
 Monsters revision's `FF`, `FE`, `EF` and `FC`. For any other reader that
 compares `FF` and then `FE`, detection fails with an error that says the game
-has an older revision. A ROM without a command reader that this recognises is
-taken to have the Ultimate Masters revision.
+has an older revision. If no recognised command reader is found, detection
+assumes the Ultimate Masters revision.
 
 It then finds each table from the instruction sequence that loads it. It matches
 Thumb code with the literal-pool offsets wildcarded. The song and sample tables
@@ -867,7 +867,7 @@ detection uses that table without scanning the data:
   Notes using the remaining samples are skipped with a warning. If fewer than
   half have readable headers, detection fails with an error naming the table.
 
-If none of that gives a table, the tool scans the ROM's data instead. Almost
+If no table is found in the code, the tool scans the ROM's data instead. Almost
 any byte string parses as track data, so a song table found this way must also
 be laid out like the driver's:
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 
-"""Run a Konami GBA sound driver's own code under the Unicorn ARM emulator.
+"""Run a Konami GBA sound driver's code under the Unicorn ARM emulator.
 
-This is the reference for checking konamidi. It calls the driver's
+This is the reference for checking supergbamidi. It calls the driver's
 init, song-start and per-frame routines directly (no BIOS, no video), and
 captures what the driver produces:
 
-    trace       the per-frame track output records, in `konamidi --trace` format
+    trace       the per-frame track output records, in `supergbamidi --trace` format
     render-ds   the DirectSound output (FIFO A = right and FIFO B = left, or both on both sides in the games whose
                 drivers say so)
     render-psg  the PSG, rendered by psg_model.py from the driver's register writes
@@ -23,16 +23,19 @@ the Duelist (BY7E), Yu-Gi-Oh! GX: Duel Academy (BYGE), Yu-Gi-Oh! World
 Championship Tournament 2004 (BYWP), Rave Master: Special Attack Force (BRME),
 Yu-Gi-Oh! The Eternal Duelist Soul (AY5E), Yu-Gi-Oh! Worldwide Edition (AYWE)
 and Yu-Gi-Oh! Dungeon Dice Monsters (AYDE) are built in. Another game needs its
-own values; see Addresses and docs/FORMAT.md.
+own values; see Addresses and docs/konami.md.
 """
 import argparse
 import struct
+import sys
 import wave
+from pathlib import Path
 
 import numpy as np
 from unicorn import UC_ARCH_ARM, UC_HOOK_CODE, UC_HOOK_INTR, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE, UC_MODE_ARM, Uc
 from unicorn.arm_const import UC_ARM_REG_CPSR, UC_ARM_REG_LR, UC_ARM_REG_R0, UC_ARM_REG_SP
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # for gbarom.py, in tools/
 import psg_model
 from gbarom import ROM_BASE, load_rom
 

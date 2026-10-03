@@ -8,23 +8,46 @@
 #include <string>
 #include <vector>
 
-namespace konamidi
+namespace supergbamidi
 {
 
-// The SF2 generator operators konamidi uses.
+// The SF2 generator operators this program uses.
 namespace sf2gen
 {
 
 enum : uint16_t
 {
+    kAttackVolEnv = 34,
+    kDecayVolEnv = 36,
+    kSustainVolEnv = 37,
+    kReleaseVolEnv = 38,
     kInstrument = 41,
     kKeyRange = 43,
+    kInitialAttenuation = 48,
+    kCoarseTune = 51,
+    kFineTune = 52,
     kSampleId = 53,
     kSampleModes = 54,
+    kScaleTuning = 56,
     kOverridingRootKey = 58,
 };
 
 } // namespace sf2gen
+
+// SF2 modulator sources: a controller in the low 7 bits, with flags for the controller palette, direction, polarity and
+// curve.
+namespace sf2src
+{
+
+enum : uint16_t
+{
+    kNoteOnVelocity = 2,
+    kController = 0x80, // the low 7 bits are a MIDI controller number
+    kNegative = 0x100,  // from the maximum down to the minimum
+    kConcave = 0x400,
+};
+
+} // namespace sf2src
 
 struct Sf2Sample
 {
@@ -55,11 +78,22 @@ struct Sf2Gen
     uint16_t amount;
 };
 
-// A zone: a list of generators. keyRange must come first and the sample or instrument reference last, which
-// Sf2File::Write() enforces.
+// A modulator: `amount` times the value of `source` (and of `amount_source`, if it's not 0) added to generator `dest`.
+struct Sf2Mod
+{
+    uint16_t source = 0;
+    uint16_t dest = 0;
+    int16_t amount = 0;
+    uint16_t amount_source = 0;
+    uint16_t transform = 0;
+};
+
+// A zone: a list of generators and modulators. keyRange must come first and the sample or instrument reference last,
+// which Sf2File::Write() enforces. An instrument's first zone is its global zone if it has no sample.
 struct Sf2Zone
 {
     std::vector<Sf2Gen> gens;
+    std::vector<Sf2Mod> mods;
 };
 
 struct Sf2Instrument
@@ -88,4 +122,4 @@ struct Sf2File
     std::vector<Sf2Preset> presets;
 };
 
-} // namespace konamidi
+} // namespace supergbamidi

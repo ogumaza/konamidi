@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 
-#include "convert.h"
+#include "konami/convert.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <memory>
@@ -13,12 +14,13 @@
 #include <utility>
 
 #include "files.h"
+#include "konami/seqformat.h"
+#include "konami/sequencer.h"
 #include "midi.h"
-#include "seqformat.h"
-#include "sequencer.h"
+#include "program.h"
 #include "sf2.h"
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 namespace
 {
@@ -685,9 +687,9 @@ private:
     }
 
     // Mirrors the Dungeon Dice Monsters voice update. Every frame sets the voice's level from its track's volume.
-    // A flagged record starts a note at the sample's own rate or the rate from the sample period table; volume 0
+    // A flagged record starts a note at the sample's rate or the rate from the sample period table; volume 0
     // stops the voice. Flag 0x40 instead treats the record's pitch as a timer period and changes the playing note's
-    // rate. On hardware this also changes the other voice sharing the FIFO, which konamidi doesn't model.
+    // rate. On hardware this also changes the other voice sharing the FIFO, which supergbamidi doesn't model.
     void SampleDungeonDice(uint32_t f, const TrackOutput& o, std::vector<Event>& out,
                            std::vector<std::string>& warnings)
     {
@@ -1475,8 +1477,8 @@ void WriteConductor(MidiTrack& conductor, const std::string& title, const Timing
     SongHeader h;
     ReadSongHeader(rom, info.song_table, song, info.revision, h);
     char text[160];
-    std::snprintf(text, sizeof text, "%s (%s) song %d, sequence data at 0x%08X, converted by konamidi",
-                  rom.Title().c_str(), rom.GameCode().c_str(), song, h.base);
+    std::snprintf(text, sizeof text, "%s (%s) song %d, sequence data at 0x%08X, converted by %s", rom.Title().c_str(),
+                  rom.GameCode().c_str(), song, h.base, kProgramName);
     conductor.Meta(0, 0x01, text);
 
     if (sim.loop_end >= 0)
@@ -1623,10 +1625,9 @@ void WriteTrack(MidiTrack& mt, int ch, int range, const std::vector<Event>& even
     }
 }
 
-} // namespace
-
-SongSummary ConvertSong(const Rom& rom, const DriverInfo& info, int song, const ConvertOptions& opt,
-                        SoundfontBuilder* shared)
+// Converts a song, writing its files if `write` is set.
+SongSummary Run(const Rom& rom, const DriverInfo& info, int song, const ConvertOptions& opt, SoundfontBuilder* shared,
+                bool write)
 {
     SongSummary sum;
     const Simulation sim = Simulate(rom, info, song, opt);
@@ -1644,10 +1645,9 @@ SongSummary ConvertSong(const Rom& rom, const DriverInfo& info, int song, const 
     const std::array<std::vector<Event>, kTracks> events = RenderTracks(rom, info, sim, sum.warnings);
     const Usage usage = CollectUsage(events, sim.loop_end, opt.track_mask);
     sum.tracks = int(std::count(usage.used.begin(), usage.used.end(), true));
-    if (sum.tracks == 0)
+    sum.silent = sum.tracks == 0; // placeholder entries, such as a "no music" song, play no notes at all
+    if (sum.silent || !write)
     {
-        // Placeholder entries (e.g. a "no music" song) play no notes at all.
-        sum.silent = true;
         sum.ok = true;
         return sum;
     }
@@ -1754,7 +1754,7 @@ SongSummary ConvertSong(const Rom& rom, const DriverInfo& info, int song, const 
     {
         Sf2File& file = sf.File();
         file.name = title;
-        file.comment = "Instruments for " + title + ", extracted by konamidi";
+        file.comment = "Instruments for " + title + ", extracted by " + kProgramName;
         sum.sf2_path = stem + ".sf2";
         if (!file.Write(sum.sf2_path, error))
         {
@@ -1766,6 +1766,19 @@ SongSummary ConvertSong(const Rom& rom, const DriverInfo& info, int song, const 
     sum.ok = true;
 
     return sum;
+}
+
+} // namespace
+
+SongSummary InspectSong(const Rom& rom, const DriverInfo& info, int song, const ConvertOptions& opt)
+{
+    return Run(rom, info, song, opt, nullptr, false);
+}
+
+SongSummary ConvertSong(const Rom& rom, const DriverInfo& info, int song, const ConvertOptions& opt,
+                        SoundfontBuilder* shared)
+{
+    return Run(rom, info, song, opt, shared, true);
 }
 
 bool DumpSong(const Rom& rom, const DriverInfo& info, int song, const std::string& path, std::string& error)
@@ -1841,4 +1854,4 @@ bool DumpSong(const Rom& rom, const DriverInfo& info, int song, const std::strin
     return WriteFile(path, std::vector<uint8_t>(text.begin(), text.end()), error);
 }
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

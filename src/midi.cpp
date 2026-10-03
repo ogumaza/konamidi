@@ -6,7 +6,7 @@
 
 #include "files.h"
 
-namespace konamidi
+namespace supergbamidi
 {
 namespace
 {
@@ -75,9 +75,10 @@ void MidiTrack::TimeSignature(uint32_t tick, int numerator, int denominator_pow2
     AddEvent(tick, kMeta, {0xFF, 0x58, 0x04, uint8_t(numerator), uint8_t(denominator_pow2), 24, 8});
 }
 
-void MidiTrack::NoteOn(uint32_t tick, int ch, int key, int velocity)
+void MidiTrack::NoteOn(uint32_t tick, int ch, int key, int velocity, bool before_programs)
 {
-    AddEvent(tick, kNoteOn, {uint8_t(0x90 | ch), Clamp7(key), std::max<uint8_t>(1, Clamp7(velocity))});
+    AddEvent(tick, before_programs ? kNoteOnFirst : kNoteOn,
+             {uint8_t(0x90 | ch), Clamp7(key), std::max<uint8_t>(1, Clamp7(velocity))});
 }
 
 void MidiTrack::NoteOff(uint32_t tick, int ch, int key)
@@ -158,4 +159,4 @@ bool MidiFile::Write(const std::string& path, std::string& error) const
     return WriteFile(path, out, error);
 }
 
-} // namespace konamidi
+} // namespace supergbamidi

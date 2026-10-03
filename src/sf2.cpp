@@ -6,8 +6,9 @@
 #include <cstring>
 
 #include "files.h"
+#include "program.h"
 
-namespace konamidi
+namespace supergbamidi
 {
 namespace
 {
@@ -134,7 +135,7 @@ void WriteInfo(Writer& w, const std::string& name, const std::string& comment)
 
     w.Zstr("isng", "EMU8000");
     w.Zstr("INAM", name);
-    w.Zstr("ISFT", "konamidi");
+    w.Zstr("ISFT", kProgramName);
     if (!comment.empty())
     {
         w.Zstr("ICMT", comment);
@@ -245,21 +246,37 @@ void WriteInstruments(Writer& w, const std::vector<Sf2Instrument>& instruments)
     w.End(c);
 
     c = w.Begin("ibag");
-    uint16_t gen = 0;
+    uint16_t gen = 0, mod = 0;
     for (const Sf2Instrument& inst : instruments)
     {
         for (const Sf2Zone& z : inst.zones)
         {
             w.U16(gen);
-            w.U16(0);
+            w.U16(mod);
             gen = uint16_t(gen + z.gens.size());
+            mod = uint16_t(mod + z.mods.size());
         }
     }
     w.U16(gen);
-    w.U16(0);
+    w.U16(mod);
     w.End(c);
 
+    // Each modulator, then the terminal record of zeros.
     c = w.Begin("imod");
+    for (const Sf2Instrument& inst : instruments)
+    {
+        for (const Sf2Zone& z : inst.zones)
+        {
+            for (const Sf2Mod& m : z.mods)
+            {
+                w.U16(m.source);
+                w.U16(m.dest);
+                w.U16(uint16_t(m.amount));
+                w.U16(m.amount_source);
+                w.U16(m.transform);
+            }
+        }
+    }
     for (int i = 0; i < 10; i++)
     {
         w.U8(0);
@@ -322,19 +339,20 @@ void WriteSampleHeaders(Writer& w, const std::vector<Sf2Sample>& samples, const 
 
 bool Sf2File::Write(const std::string& path, std::string& error) const
 {
-    // Zones and generators are numbered with 16 bits.
-    size_t zones = 0, gens = 0;
+    // Zones, generators and modulators are numbered with 16 bits.
+    size_t zones = 0, gens = 0, mods = 0;
     for (const Sf2Instrument& inst : instruments)
     {
         zones += inst.zones.size();
         for (const Sf2Zone& z : inst.zones)
         {
             gens += z.gens.size();
+            mods += z.mods.size();
         }
     }
-    if (zones > 0xFFFF || gens > 0xFFFF)
+    if (zones > 0xFFFF || gens > 0xFFFF || mods > 0xFFFF)
     {
-        error = "soundfont too large (more than 65535 zones or generators)";
+        error = "soundfont too large (more than 65535 zones, generators or modulators)";
         return false;
     }
 
@@ -355,4 +373,4 @@ bool Sf2File::Write(const std::string& path, std::string& error) const
     return WriteFile(path, w.buf, error);
 }
 
-} // namespace konamidi
+} // namespace supergbamidi

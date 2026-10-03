@@ -8,17 +8,17 @@
 #include <string>
 #include <vector>
 
+#include "konami/seqformat.h"
 #include "rom.h"
-#include "seqformat.h"
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 
 // CPU clock frequency in Hz; also the timer clock.
 constexpr double kCpuHz = 16777216.0;
 
 // A DirectSound sample: header { u32 step, s32 length, s32 loop_start } + s8 PCM. In the Dungeon Dice Monsters
-// revision, an entry of the sample table points at the PCM, and gives the length and the sample's own rate.
+// revision, an entry of the sample table points at the PCM, and gives the length and the sample's rate.
 struct SampleInfo
 {
     bool Looped() const
@@ -34,7 +34,7 @@ struct SampleInfo
 
     bool valid = false;
     uint32_t step = 0;       // playback step at semitone 0, 4.12 fixed point per mixer sample
-    uint32_t period = 0;     // Dungeon Dice Monsters: CPU cycles per sample at the sample's own rate
+    uint32_t period = 0;     // Dungeon Dice Monsters: CPU cycles per sample at the sample's rate
     int32_t length = 0;      // in samples (bytes)
     int32_t loop_start = -1; // -1: one-shot
     uint32_t data = 0;       // address of the first PCM byte
@@ -74,7 +74,7 @@ struct DriverInfo
     // timer period of each sample pitch, and the NR32 volume code of each track volume. Its vibrato reads the PSG
     // frequency table from entry `vibrato_entry` on, 4 entries for each note.
     uint32_t sample_map = 0;          // u8 sample per entry
-    uint32_t sample_period_table = 0; // u16 CPU cycles per sample, per 1/16 semitone; 0 for a sample's own rate
+    uint32_t sample_period_table = 0; // u16 CPU cycles per sample, per 1/16 semitone; 0 for a sample's rate
     uint32_t wave_volume_table = 0;   // u16 NR32 value per volume (0-15)
     int vibrato_entry = 0;
 
@@ -96,8 +96,8 @@ struct DriverOverrides
     double mix_rate = 0;
 };
 
-// Finds the driver's tables in `rom`. Returns false and sets `error` if the driver is missing or its tables are
-// unusable.
+// Finds the driver's tables in `rom`. Returns false and sets `error` if the driver's tables are unusable, or returns
+// false with `error` empty if the game shows no sign of the driver.
 bool DetectDriver(const Rom& rom, const DriverOverrides& overrides, DriverInfo& info, std::string& error);
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

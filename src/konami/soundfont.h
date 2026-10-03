@@ -10,11 +10,11 @@
 #include <map>
 #include <utility>
 
-#include "driver.h"
+#include "konami/driver.h"
 #include "rom.h"
 #include "sf2.h"
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 
 // Level of a full-scale bipolar waveform, relative to a full-scale DirectSound sample, produced by a PSG channel at
@@ -23,7 +23,7 @@ namespace konamidi
 // voice at level 2v.
 constexpr int kPsgLevelPerVolume = 2;
 
-// The fixed level that wave notes play at. Wave samples are the driver's own pre-scaled wave RAM images (see
+// The fixed level that wave notes play at. Wave samples are the driver's pre-scaled wave RAM images (see
 // WaveSample), stored at half scale so any row fits without clipping.
 constexpr int kWaveRowLevel = 2 * kPsgLevelPerVolume * 15;
 
@@ -109,4 +109,4 @@ private:
     std::map<int, Pitch> pitch_;
 };
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

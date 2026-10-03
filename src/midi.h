@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace konamidi
+namespace supergbamidi
 {
 
 // MIDI controller numbers.
@@ -47,7 +47,9 @@ public:
     void Tempo(uint32_t tick, uint32_t micros_per_quarter);
     void TimeSignature(uint32_t tick, int numerator, int denominator_pow2);
 
-    void NoteOn(uint32_t tick, int ch, int key, int velocity);
+    // Adds a note on. With `before_programs`, it goes before the bank selects and program changes at the same tick, so
+    // that it plays with the program from before them.
+    void NoteOn(uint32_t tick, int ch, int key, int velocity, bool before_programs = false);
     void NoteOff(uint32_t tick, int ch, int key);
     void Control(uint32_t tick, int ch, int cc, int value);
     void Program(uint32_t tick, int ch, int program);
@@ -73,6 +75,7 @@ private:
     {
         kMeta = 0,
         kNoteOff = 10,
+        kNoteOnFirst = 12,
         kBank = 15,
         kProgram = 20,
         kControl = 30,
@@ -115,4 +118,4 @@ private:
     std::deque<MidiTrack> tracks_; // deque: AddTrack() references stay valid
 };
 
-} // namespace konamidi
+} // namespace supergbamidi

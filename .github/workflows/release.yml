@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 
 # A vX.Y.Z tag publishes a Windows x64 release. X.Y.Z must match CMakeLists.txt, with notes in
-# docs/release-notes/X.Y.Z.md. The konamidi-X.Y.Z-win-x64.zip package contains konamidi.exe, README.md, LICENSE
+# docs/release-notes/X.Y.Z.md. The supergbamidi-X.Y.Z-win-x64.zip package contains supergbamidi.exe, README.md, LICENSE
 # and THIRD_PARTY_NOTICES.
 #
 # A manual run (Actions > Release > Run workflow) builds the same zip and uploads it as a workflow artifact, without
@@ -28,7 +28,7 @@ jobs:
       - id: version
         name: Read the version
         run: |
-          version=$(sed -n 's/^project(konamidi VERSION \([0-9][0-9.]*\) .*/\1/p' CMakeLists.txt)
+          version=$(sed -n 's/^project(supergbamidi VERSION \([0-9][0-9.]*\) .*/\1/p' CMakeLists.txt)
           if [ -z "$version" ]; then
             echo "::error::project() in CMakeLists.txt has no version"
             exit 1
@@ -52,17 +52,17 @@ jobs:
 
       - name: Build
         run: |
-          cmake -S . -B build -A x64 -DKONAMIDI_BUILD_TESTS=OFF
-          cmake --build build --config Release --parallel --target konamidi
+          cmake -S . -B build -A x64 -DSUPERGBAMIDI_BUILD_TESTS=OFF
+          cmake --build build --config Release --parallel --target supergbamidi
 
       # Check both --version and the version resource that Windows shows in the file's properties.
       - name: Check the version
         shell: pwsh
         run: |
           $version = '${{ needs.version.outputs.version }}'
-          $said = (& build/Release/konamidi.exe --version) -join ''
-          if ($said -ne "konamidi $version") { throw "--version printed '$said'; expected 'konamidi $version'" }
-          $info = (Get-Item build/Release/konamidi.exe).VersionInfo
+          $said = (& build/Release/supergbamidi.exe --version) -join ''
+          if ($said -ne "supergbamidi $version") { throw "--version printed '$said'; expected 'supergbamidi $version'" }
+          $info = (Get-Item build/Release/supergbamidi.exe).VersionInfo
           if ($info.ProductVersion -ne $version -or $info.FileVersion -ne $version) {
             throw "the version resource has file version '$($info.FileVersion)' and product version '$($info.ProductVersion)'; expected $version"
           }
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: win-x64
-          path: build/Release/konamidi.exe
+          path: build/Release/supergbamidi.exe
 
   package:
     needs: [version, windows]
@@ -90,21 +90,21 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist stage
-          cp artifacts/win-x64/konamidi.exe README.md LICENSE THIRD_PARTY_NOTICES stage/
-          (cd stage && zip -q -X "../dist/konamidi-$VERSION-win-x64.zip" *)
-          unzip -l "dist/konamidi-$VERSION-win-x64.zip"
+          cp artifacts/win-x64/supergbamidi.exe README.md LICENSE THIRD_PARTY_NOTICES stage/
+          (cd stage && zip -q -X "../dist/supergbamidi-$VERSION-win-x64.zip" *)
+          unzip -l "dist/supergbamidi-$VERSION-win-x64.zip"
 
       - name: Publish the release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "konamidi $VERSION" \
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "supergbamidi $VERSION" \
             --notes-file "docs/release-notes/$VERSION.md"
 
       - name: Upload the package (manual run)
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v7
         with:
-          name: konamidi-${{ env.VERSION }}
+          name: supergbamidi-${{ env.VERSION }}
           path: dist/

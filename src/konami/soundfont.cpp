@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-#include "soundfont.h"
+#include "konami/soundfont.h"
 
 #include <algorithm>
 #include <cmath>
@@ -10,10 +10,10 @@
 #include <string>
 #include <vector>
 
-#include "pitch.h"
-#include "seqformat.h"
+#include "konami/pitch.h"
+#include "konami/seqformat.h"
 
-namespace konamidi
+namespace supergbamidi::konami
 {
 namespace
 {
@@ -426,4 +426,4 @@ int SoundfontBuilder::NoiseSample(uint16_t setting)
     return cache_[key] = int(file_.samples.size()) - 1;
 }
 
-} // namespace konamidi
+} // namespace supergbamidi::konami

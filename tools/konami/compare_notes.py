@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 
-"""Compare konamidi's MIDI files and SoundFonts with the game's own driver, note by note.
+"""Compare supergbamidi's MIDI files and SoundFonts with the game's driver, note by note.
 
-    compare_notes.py ROM KONAMIDI FOLDER [--songs 0-22]
+    compare_notes.py ROM SUPERGBAMIDI FOLDER [--songs 0-22]
 
-FOLDER holds KONAMIDI's conversion of ROM: NAME_NN.mid and NAME_NN.sf2 for
+FOLDER holds SUPERGBAMIDI's conversion of ROM: NAME_NN.mid and NAME_NN.sf2 for
 song NN. For each song, the driver runs under driver_emu.py for as long as the
 MIDI file lasts. On every frame, the script compares the DirectSound voice
 records and PSG registers that the driver leaves in the hardware with what the
@@ -25,9 +25,9 @@ MIDI file plays through its SoundFont:
 * CC10 and CC11 give the driver's level on each side to within 1.5 dB, and
   CC91 follows the driver's echo routing, which PSG channels aren't part of.
 
-konamidi writes no MIDI file for a song with no notes. If `KONAMIDI --info`
-lists a song missing from FOLDER, the driver must be silent for its reported
-duration.
+supergbamidi writes no MIDI file for a song with no notes. If
+`SUPERGBAMIDI --info` lists a song missing from FOLDER, the driver must be
+silent for its reported duration.
 
 It prints the first 10 differences in each song and the largest pitch and level
 deviations, and exits with status 1 if anything differs.
@@ -38,10 +38,12 @@ import math
 import re
 import struct
 import subprocess
+import sys
 from pathlib import Path
 
 from unicorn import UC_HOOK_MEM_WRITE
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # for gbarom.py, in tools/
 from compare_trace import parse_range
 from driver_emu import DriverEmulator
 from gbarom import ROM_BASE, load_rom
@@ -52,8 +54,8 @@ PSG_TRACKS = {'Square 1': 0, 'Square 2': 1, 'Wave': 2, 'Noise': 3}
 DUTY_NAMES = ['12.5%', '25%', '50%', '75%']
 FRAME_SECONDS = 280896 / 16777216
 
-# The level konamidi plays every wave note at (kWaveRowLevel): the wave RAM image holds the note's volume, so this is
-# the level at the 100% volume code.
+# The level supergbamidi plays every wave note at (kWaveRowLevel): the wave RAM image holds the note's volume, so this
+# is the level at the 100% volume code.
 WAVE_LEVEL = 60
 
 # The share of the PSG in the mix for each setting of SOUNDCNT_H bits 0-1 (the last is prohibited).
@@ -204,7 +206,7 @@ def midi_frames(events, frames):
 
 
 def midi_levels(cc10, cc11):
-    """Returns the per-side levels (full scale 128) that CC10 and CC11 stand for, the inverse of konamidi's
+    """Returns the per-side levels (full scale 128) that CC10 and CC11 stand for, the inverse of supergbamidi's
     LevelsToControllers."""
     amplitude = (cc11 / 127) ** 2 * math.sqrt(2) * 127 / 128
     angle = cc10 / 127 * math.pi / 2
@@ -250,7 +252,7 @@ class Psg:
 
     def side_scales(self):
         """Returns the scale of a PSG channel's level on the left and on the right, against the master volume 7 and
-        the 100% PSG share that konamidi's levels assume."""
+        the 100% PSG share that supergbamidi's levels assume."""
         nr50 = self.reg.get(0x04000080, 0)
         ratio = PSG_RATIOS[self.reg.get(0x04000082, 0) & 3]
         return ((nr50 >> 4 & 7) + 1) / 8 * ratio, ((nr50 & 7) + 1) / 8 * ratio
@@ -311,8 +313,8 @@ def run_driver(rom, song, frames):
 
 @functools.lru_cache(maxsize=None)
 def noise_samples(nr43):
-    """Returns the noise sample konamidi writes for an NR43 value, from an integer model of the LFSR at 32768 Hz, and
-    its loop."""
+    """Returns the noise sample supergbamidi writes for an NR43 value, from an integer model of the LFSR at 32768 Hz,
+    and its loop."""
     shift, ratio, narrow = nr43 >> 4, nr43 & 7, nr43 & 8
     if shift >= 14:
         points = [0] * 64
@@ -428,7 +430,7 @@ def check_sample_track(rom, sample_table, soundfont, voice, midi, driver, rate, 
                 report.differ(where, '%s loops differently from the driver' % z['name'])
 
         # Mixer pitch uses integer steps; allow an error of two steps. A FIFO plays at its timer rate, which
-        # konamidi rounds to the nearest 1/32 semitone.
+        # supergbamidi rounds to the nearest 1/32 semitone.
         if state['periods'] is not None:
             period = state['periods'][voice >> 1] or 0x10000
             driver_rate, tolerance, unit = 16777216 / period, 2.0, 'period %d' % period
@@ -551,13 +553,15 @@ def check_silent(name, driver, addr, report):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('rom', metavar='ROM', help='the game (.gba) or a GSF rip of it')
-    p.add_argument('konamidi', metavar='KONAMIDI', help='konamidi, which gives the sample table\'s address')
+    p.add_argument('supergbamidi', metavar='SUPERGBAMIDI',
+                   help='supergbamidi, which gives the sample table\'s address')
     p.add_argument('folder', metavar='FOLDER', help='the conversion to check')
     p.add_argument('--songs', help='the songs to check, such as 0-22 or 1,4,9 (default: every song that --info '
                                    'lists or FOLDER has a MIDI file for)')
     a = p.parse_args()
     rom = load_rom(a.rom)
-    info = subprocess.run([a.konamidi, '--info', a.rom], capture_output=True, encoding='utf-8', check=True).stdout
+    info = subprocess.run([a.supergbamidi, '--info', a.rom], capture_output=True, encoding='utf-8',
+                          check=True).stdout
     sample_table = int(re.search(r'sample table 0x([0-9A-F]{8})', info).group(1), 16)
     midi_files = {int(path.stem.rsplit('_', 1)[1]): path for path in Path(a.folder).glob('*.mid')}
     if not midi_files:
@@ -567,7 +571,7 @@ def main():
     lengths = {int(m.group(1)): round((int(m.group(2)) * 60 + float(m.group(3))) / FRAME_SECONDS)
                for m in re.finditer(r'^\s+(\d+)\s+0x[0-9A-F]{8}\s+\d+\s+(\d+):(\d+\.\d+)', info, re.M)}
     if not lengths:
-        raise SystemExit('found no songs in the song list of konamidi --info')
+        raise SystemExit('found no songs in the song list of supergbamidi --info')
     songs = parse_range(a.songs) if a.songs else sorted(set(lengths) | set(midi_files))
 
     total = Report()
@@ -595,7 +599,7 @@ def main():
                                                 report, name)
             played = '%5d notes' % notes
         elif song in lengths:
-            # konamidi writes no files for a song that plays no notes.
+            # supergbamidi writes no files for a song that plays no notes.
             frames = max(1, lengths[song])
             driver, _, addr = run_driver(rom, song, frames)
             track_names = list(PSG_TRACKS) + ['Voice %d' % v for v in range(addr.voice_count)]
